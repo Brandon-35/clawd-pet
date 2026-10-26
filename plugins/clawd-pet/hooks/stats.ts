@@ -14,6 +14,7 @@ export type Stats = {
   calls: Partial<Record<ToolMode, number>>
   failed: number
   files: string[] // each file an edit touched, once
+  streak?: number // failed tool calls in a row, up to now
 }
 
 export const newStats = (since: number): Stats => ({ since, turns: 0, workMs: 0, calls: {}, failed: 0, files: [] })
@@ -26,6 +27,7 @@ export function countCall(s: Stats, mode: ToolMode, file: string, failed: boolea
     ...s,
     calls: { ...s.calls, [mode]: (s.calls[mode] ?? 0) + 1 },
     failed: s.failed + (failed ? 1 : 0),
+    streak: failed ? (s.streak ?? 0) + 1 : 0,
     files: isNew ? [...s.files, file] : s.files,
   }
 }
@@ -76,4 +78,13 @@ export function turnRecap(start: Stats, end: Stats, durationMs: number, reason: 
   const head = reason === 'answer' ? `done in ${fmtDuration(durationMs)}` : `the turn ended in ${reason === 'error' ? 'an error' : 'a refusal'} after ${fmtDuration(durationMs)}`
 
   return `${name}: ${[head, ...parts].join(' · ')}`
+}
+
+const STREAK_WARN = 3
+
+/** The toast when the failed tool calls in a row reach 3, 6, 9, ...: Claude may be going in circles. */
+export function streakWarning(s: Stats, name: string) {
+  const n = s.streak ?? 0
+
+  return n > 0 && n % STREAK_WARN === 0 ? `${name}: ${n} tool calls failed in a row. Press Esc to step in if Claude is stuck.` : undefined
 }

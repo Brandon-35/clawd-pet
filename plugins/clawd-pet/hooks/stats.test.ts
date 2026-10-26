@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { countCall, countTurn, newStats, statsReport, turnRecap } from './stats'
+import { countCall, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
 
 test('tool calls count by kind, failures add up, and each edited file counts once', () => {
   let s = newStats(0)
@@ -11,6 +11,7 @@ test('tool calls count by kind, failures add up, and each edited file counts onc
   expect(s.calls).toEqual({ edit: 2, read: 1, bash: 1 })
   expect(s.failed).toBe(2)
   expect(s.files).toEqual(['/a/app.ts'])
+  expect(s.streak).toBe(1)
 })
 
 test('the report lists turns, calls by kind, failures, files, and the HUD readings', () => {
@@ -41,4 +42,14 @@ test('a long turn ends with a recap of what it did; a short or stopped one ends 
   expect(turnRecap(start, end, 61_000, 'error', 'clawd')).toBe('clawd: the turn ended in an error after 1m 01s · 3 tool calls · 2 files edited · 1 failed')
   expect(turnRecap(start, end, 29_000, 'answer', 'clawd')).toBeUndefined()
   expect(turnRecap(start, end, 134_000, 'aborted', 'clawd')).toBeUndefined()
+})
+
+test('three failed calls in a row warn, a success starts the count over', () => {
+  const fails = (s: ReturnType<typeof newStats>, n: number) => Array.from({ length: n }).reduce<ReturnType<typeof newStats>>(acc => countCall(acc, 'bash', '', true), s)
+  expect(streakWarning(fails(newStats(0), 2), 'clawd')).toBeUndefined()
+  expect(streakWarning(fails(newStats(0), 3), 'clawd')).toBe('clawd: 3 tool calls failed in a row. Press Esc to step in if Claude is stuck.')
+  expect(streakWarning(fails(newStats(0), 4), 'clawd')).toBeUndefined()
+  expect(streakWarning(fails(newStats(0), 6), 'clawd')).toContain('6 tool calls')
+  expect(streakWarning(countCall(fails(newStats(0), 2), 'read', '', false), 'clawd')).toBeUndefined()
+  expect(streakWarning({ ...newStats(0), streak: undefined }, 'clawd')).toBeUndefined()
 })

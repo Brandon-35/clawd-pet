@@ -10,7 +10,7 @@ import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
 import { previewPage } from './preview'
 import { readSettings } from './settings'
-import { countCall, countTurn, newStats, statsReport, turnRecap } from './stats'
+import { countCall, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
 import { BODY_W, FACES, HEIGHT, MAX_MINIS, compose, crop, encodeCells, encodeSvg, trailWidth } from './pixels'
 import type { Body } from './pixels'
 import { GROUND_H, drawBand, layScene, obstacleSpans } from './scene'
@@ -228,9 +228,14 @@ export const register: Register = (on, options) => {
       // A permission prompt for this call has been answered by now.
       alert = false
     }
-    const failed = 'deny' in result || ('isError' in result && result.isError === true)
-    stats = countCall(stats, mode, typeof input.file_path === 'string' ? input.file_path : '', failed)
-    if (failed) {
+    // A denied call counts for the pet's face, not as a failure: the user or a hook chose it.
+    const errored = 'isError' in result && result.isError === true
+    stats = countCall(stats, mode, typeof input.file_path === 'string' ? input.file_path : '', errored)
+    const streak = settings.toasts ? streakWarning(stats, body?.name ?? 'clawd') : undefined
+    if (streak) {
+      $.ui.toast(streak, { timeoutMs: 8000 })
+    }
+    if (errored || 'deny' in result) {
       await update($, anim, a => fail(a, lastToolAt))
     }
 

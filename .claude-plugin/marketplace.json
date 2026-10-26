@@ -1,0 +1,14 @@
+{
+  "name": "clawd-pet",
+  "description": "Clawd, a pixel-art pet that lives above the Claude Code prompt",
+  "owner": {
+    "name": "Brandon Ta",
+    "url": "https://github.com/Brandon-35"
+  },
+  "plugins": [
+    {
+      "name": "clawd-pet",
+      "source": "./plugins/clawd-pet"
+    }
+  ]
+}

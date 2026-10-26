@@ -1,0 +1,65 @@
+{
+  "name": "clawd-pet",
+  "version": "0.3.1",
+  "description": "Clawd, a pixel-art pet above the prompt that acts out each tool call, plus an HP/MP/ST HUD below it",
+  "author": {
+    "name": "Brandon Ta"
+  },
+  "homepage": "https://github.com/Brandon-35/clawd-pet",
+  "repository": "https://github.com/Brandon-35/clawd-pet",
+  "license": "MIT",
+  "keywords": [
+    "clawd",
+    "claude-code",
+    "mod",
+    "pet",
+    "pixel-art",
+    "hud"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "speed": {
+      "type": "string",
+      "title": "Speed",
+      "description": "How quickly the pet runs and animates.",
+      "options": [
+        "slow",
+        "normal",
+        "fast"
+      ],
+      "default": "normal"
+    },
+    "sleepAfter": {
+      "type": "number",
+      "title": "Sleep after (seconds)",
+      "description": "Idle time before the pet falls asleep. 0 keeps it awake.",
+      "default": 60,
+      "min": 0,
+      "max": 3600
+    },
+    "hud": {
+      "type": "boolean",
+      "title": "HUD",
+      "description": "The HP, MP, and ST bars below the prompt.",
+      "default": true
+    },
+    "statusLine": {
+      "type": "boolean",
+      "title": "Status line",
+      "description": "The text beside the pet.",
+      "default": true
+    },
+    "targets": {
+      "type": "boolean",
+      "title": "Name files and commands",
+      "description": "The status line names the file, pattern, command, host, or search query a tool works on. Turn it off to share your screen.",
+      "default": true
+    },
+    "minis": {
+      "type": "boolean",
+      "title": "Subagent minis",
+      "description": "A mini behind the pet for each running subagent.",
+      "default": true
+    }
+  }
+}

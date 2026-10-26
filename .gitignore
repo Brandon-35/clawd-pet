@@ -1,0 +1,9 @@
+.DS_Store
+# Written by Claude Code when it loads the mod; local to each machine
+plugins/*/.claude-plugin/types/
+node_modules/
+*.log
+.idea/
+.vscode/
+Thumbs.db
+tools/preview/preview.html

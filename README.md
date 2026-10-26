@@ -52,6 +52,34 @@ Clawd is a clay-colored block with slit eyes, two stubby arms, and four short le
 
 The status line beside Clawd names what each tool works on. Turn that off with the **Name files and commands** setting when you share your screen.
 
+Once a turn has run for five seconds, the status line also shows how long: `thinking · 1m 05s`. While Claude Code waits on you, it shows how long you have kept it waiting.
+
+## Toasts and `/clawd`
+
+Clawd speaks up in a toast when something needs your eyes:
+
+| When | Toast |
+| --- | --- |
+| A turn of 30 seconds or more ends | `done in 2m 14s · 18 tool calls · 3 files edited · 1 failed`, or that it ended in an error |
+| Three tool calls fail in a row (and every three after) | `3 tool calls failed in a row. Press Esc to step in if Claude is stuck.` |
+| Context left falls to 20 %, then to 10 % | `context 18% left: run /compact at a good stopping point` |
+| The 5-hour or 7-day limit falls to 10 % | `5-hour limit 8% left, resets in 1h12m` |
+
+Each gauge warns once on the way down, and again only if it climbs back first. A turn you stop yourself ends quietly. The **Toasts** setting turns all of these off.
+
+Run `/clawd` at any time, even mid-turn, for a report on the session so far:
+
+```text
+report on this session, 1h 02m in:
+- 14 turns, 23m 10s of work
+- 182 tool calls: 60 read, 40 search, 30 edit, 45 bash, 5 web, 2 agent
+- 7 failed (4%)
+- 12 files edited
+- context 64% left · 5-hour limit 80% left, resets in 2h10m
+```
+
+A failed call is one that ran and returned an error; a call you deny does not count. The counts start over with each session.
+
 ## The HUD
 
 A rounded window under the prompt, titled with the pet's name:
@@ -100,6 +128,7 @@ Run `/plugin configure clawd-pet@clawd-pet` in a session.
 | Status line | on | The text beside the pet. |
 | Name files and commands | on | Show the file, pattern, command, host, or query each tool works on. |
 | Subagent minis | on | One mini per running subagent behind the pet. |
+| Toasts | on | The recap after a long turn, and the warnings for failing calls, low context, and low rate limits. |
 
 Or from a shell, then restart Claude Code:
 
@@ -107,7 +136,7 @@ Or from a shell, then restart Claude Code:
 echo '{"speed": "fast", "sleepAfter": "300"}' | claude plugin configure clawd-pet@clawd-pet --values-stdin
 ```
 
-The install may say "6 userConfig options not yet set". Every setting has a default, so nothing is needed.
+The install may say "7 userConfig options not yet set". Every setting has a default, so nothing is needed.
 
 ## Update
 
@@ -127,10 +156,11 @@ Clawd is drawn with colored text cells, so any terminal with 24-bit color works.
 A mod runs inside Claude Code with your permissions. clawd-pet:
 
 - reads its own theme, polls session usage and the subagent list, and draws;
+- registers the `/clawd` command, which prints counts it keeps in memory for the session;
 - registers three tools for themes: `get_theme` returns the current theme, `preview_theme` writes a preview page to the path Claude gives it, and `set_theme` stores a theme in the mod's own store;
 - makes no network requests, starts no processes, and reads no environment variables.
 
-Its tool hook sees each tool's input but keeps only a short target for the status line: for `Bash`, the command's first line cut to 24 characters. The notification hook only notes that a notification arrived; it never reads the text.
+Its tool hook sees each tool's input but keeps only a short target for the status line: for `Bash`, the command's first line cut to 24 characters. For `/clawd` it also keeps the paths of edited files, in memory only, to count each file once; the report prints the count, never the paths. The turn hooks read only when a turn starts and ends, how long it took, and why it ended. The notification hook only notes that a notification arrived; it never reads the text.
 
 To check, run `claude plugin validate plugins/clawd-pet` on a clone. Its `calls:` line lists every Claude Code API the mod uses.
 

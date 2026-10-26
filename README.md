@@ -1,0 +1,183 @@
+<h1 align="center">clawd-pet</h1>
+
+<p align="center">
+  Clawd lives above your Claude Code prompt and acts out every tool call as it happens.<br>
+  Below the prompt, a small HUD tracks the context window and your rate limits.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-d97757"></a>
+  <img alt="Claude Code 2.1.287 or later" src="https://img.shields.io/badge/Claude_Code-2.1.287+-e8aa38">
+</p>
+
+<p align="center">
+  <img src="docs/images/demo.gif" width="806" alt="A terminal session: Clawd reads a file, searches, sends a mini off with a subagent, runs a failing command, edits, and cheers when the turn is done">
+</p>
+
+## Install
+
+Requires Claude Code v2.1.287 or newer (check with `claude --version`).
+
+```bash
+claude plugin marketplace add Brandon-35/clawd-pet
+claude plugin install clawd-pet@clawd-pet
+```
+
+Open a new session, or run `/reload-plugins` in the one you have. Clawd shows up above the prompt.
+
+Remove it with `claude plugin uninstall clawd-pet@clawd-pet`.
+
+## What Clawd does
+
+Clawd is a clay-colored block with slit eyes, two stubby arms, and four short legs. It never changes shape; it lifts its arms, steps its legs, and hops.
+
+| What happens in the session | What Clawd does |
+| --- | --- |
+| Nothing | Stands, blinks, glances around, waves now and then. Dozes off after the **Sleep after** time (one minute unless you change it). |
+| You send a prompt | Hops, arms up |
+| A tool call finishes | Trots back and forth across the band for 4 seconds, leaping anything in its way |
+| Claude is thinking | Taps its chin, with dots rising beside it |
+| `Read` | Holds an open book: `reading app.ts` |
+| `Grep`, `Glob` | Pans a lens over a page: `looking for "useState"` |
+| `Edit`, `MultiEdit`, `Write`, `NotebookEdit`, `TodoWrite` | Writes on a card with a pencil: `editing app.ts` |
+| `Bash`, and any other tool | Watches a tiny terminal: `$ npm test` |
+| `WebFetch`, `WebSearch` | Turns a globe with a satellite: `fetching docs.anthropic.com` |
+| A subagent starts | Lights a bulb. A small Clawd joins the line behind it until that subagent is done, then pops off with a sparkle, or greys out if it failed. |
+| A tool call fails | Dizzy eyes and stars |
+| The turn ends with an answer | Cheers and hops |
+| You stop the turn (Esc) | Sad eyes: `okay, stopping` |
+| The turn ends in an error or a refusal | Dizzy eyes, like a failed tool call |
+| The conversation compacts | Spiral eyes while it packs up the context |
+| Claude Code needs you (a permission prompt or any other notification) | A blinking gold `!` and `you’re needed`, until you answer |
+
+The status line beside Clawd names what each tool works on. Turn that off with the **Name files and commands** setting when you share your screen.
+
+## The HUD
+
+A rounded window under the prompt, titled with the pet's name:
+
+```text
+╭─ clawd ────────────────────────────────────╮
+│ HP ━━━━━━━━━━━━━━━━━━━━ 100%               │
+│ MP ━━━━━━━━━━━━━━━━━───  84%  ↻ 3h46m      │
+│ ST ━━━━━━━━━━━━━━━━━━╸─  92%  ↻ 6d12h      │
+╰────────────────────────────────────────────╯
+```
+
+- **HP** is how much of the context window is left. The bar goes amber at 50 % and red at 25 %; under 10 % it suggests `/compact`.
+- **MP** is what's left of the 5-hour rate limit, and `↻` is the time until it resets.
+- **ST** is the same for the 7-day limit.
+
+Bars fill in half cells and shrink on a narrow terminal. MP and ST go red under 15 %, and appear on Pro and Max plans once a response has reported the limit.
+
+Clawd watches the HUD too: while idle or thinking it sweats at 50 % HP, goes dizzy at 25 %, and looks worn out when MP or ST drops under 20 %.
+
+## Customize
+
+Ask Claude in any session, or run `/clawd-pet:clawd-pet`. Some things to try:
+
+- "make Clawd teal", or "draw me a pet frog instead";
+- "give it a coffee mug when it runs commands", "drop the thinking dots";
+- "make the subagent minis tiny frogs";
+- "write pirate status lines", "make the bash line green";
+- "a purple HUD frame", "call HP FUEL", "hide ST";
+- "a beach with crabs to jump over";
+- any of the settings below.
+
+Claude first opens a preview page with every motion, face, status line, and HUD state, plus the pet running through its scene on a dark and a light background. Ask for changes until it looks right. Once you approve, it replaces the pet on screen right away and is kept for future sessions. Ask for Clawd back to undo.
+
+Everything except the settings lives in one theme, a JSON object described in [`FORMAT.md`](plugins/clawd-pet/skills/clawd-pet/FORMAT.md). Clawd's own theme, [`clawd.json`](plugins/clawd-pet/assets/clawd.json), uses nearly every field and is the best starting point. Ask Claude to save your theme as a file to share it, or to load a file someone sent you.
+
+## Settings
+
+Run `/plugin configure clawd-pet@clawd-pet` in a session.
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Speed | `normal` | Animation and running speed: `slow`, `normal`, or `fast`. |
+| Sleep after (seconds) | `60` | Idle time before Clawd sleeps. `0` keeps it awake. |
+| HUD | on | The HP, MP, and ST window below the prompt. |
+| Status line | on | The text beside the pet. |
+| Name files and commands | on | Show the file, pattern, command, host, or query each tool works on. |
+| Subagent minis | on | One mini per running subagent behind the pet. |
+
+Or from a shell, then restart Claude Code:
+
+```bash
+echo '{"speed": "fast", "sleepAfter": "300"}' | claude plugin configure clawd-pet@clawd-pet --values-stdin
+```
+
+The install may say "6 userConfig options not yet set". Every setting has a default, so nothing is needed.
+
+## Update
+
+```bash
+claude plugin marketplace update clawd-pet
+claude plugin update clawd-pet@clawd-pet
+```
+
+Start a new session afterwards. Your theme and settings are kept.
+
+## Where it shows
+
+Clawd is drawn with colored text cells, so any terminal with 24-bit color works. The Desktop app's Code tab draws it as SVG. It does not appear in the VS Code chat panel, in `claude -p`, or in cloud sessions. The HUD is terminal only.
+
+## Privacy and security
+
+A mod runs inside Claude Code with your permissions. clawd-pet:
+
+- reads its own theme, polls session usage and the subagent list, and draws;
+- registers three tools for themes: `get_theme` returns the current theme, `preview_theme` writes a preview page to the path Claude gives it, and `set_theme` stores a theme in the mod's own store;
+- makes no network requests, starts no processes, and reads no environment variables.
+
+Its tool hook sees each tool's input but keeps only a short target for the status line: for `Bash`, the command's first line cut to 24 characters. The notification hook only notes that a notification arrived; it never reads the text.
+
+To check, run `claude plugin validate plugins/clawd-pet` on a clone. Its `calls:` line lists every Claude Code API the mod uses.
+
+Report a vulnerability through a [private security advisory](https://github.com/Brandon-35/clawd-pet/security/advisories/new).
+
+## Development
+
+```text
+.claude-plugin/marketplace.json   marketplace with the one plugin
+plugins/clawd-pet/
+  .claude-plugin/plugin.json      name, version, settings
+  hooks/hooks.json                points Claude Code at register.tsx
+  hooks/register.tsx              connects Claude Code events to the modules, serves the theme tools
+  hooks/anim.ts                   picks the pet's next mode on each tick, and when it leaps
+  hooks/pixels.ts                 draws a frame: body, eyes, props, effects, minis
+  hooks/theme.ts                  reads a theme and poses its sprite into every clip
+  hooks/scene.ts                  lays out and draws the scene
+  hooks/preview.ts                writes the preview page
+  hooks/status.ts                 the status line
+  hooks/hud.ts                    the HUD window and its bars
+  hooks/minis.ts                  one mini per subagent
+  hooks/settings.ts               reads the settings
+  hooks/*.test.ts                 tests, one file per module
+  types/index.d.ts                the mod's state contract
+  assets/clawd.json               Clawd's theme
+  skills/clawd-pet/               the theme skill and FORMAT.md
+scripts/build-clawd-assets.mjs    writes assets/clawd.json
+tools/preview/build.mjs           writes the preview for a theme file
+tools/demo/record.mjs             records docs/images/demo.gif
+```
+
+Run your working copy with `claude --plugin-dir ./plugins/clawd-pet`; saving a file reloads the mod. Before a pull request:
+
+```bash
+claude plugin validate . --strict
+claude plugin validate plugins/clawd-pet --strict
+claude plugin test plugins/clawd-pet
+```
+
+`tsc -p plugins/clawd-pet` type-checks the mod once one `--plugin-dir` session has written `plugins/clawd-pet/.claude-plugin/types/`. The tests don't need it.
+
+- `node scripts/build-clawd-assets.mjs` redraws Clawd after you change its layout or palette.
+- `node tools/preview/build.mjs [theme file]` (Node 22.18+) writes `tools/preview/preview.html` for Clawd or the given theme.
+- `node tools/demo/record.mjs` (Node 22.18+, Google Chrome or `CHROME`, and `ffmpeg`) re-records the demo GIF.
+
+Installed copies update only when `version` in `plugins/clawd-pet/.claude-plugin/plugin.json` changes. Contributor rules are in [`CLAUDE.md`](CLAUDE.md).
+
+## License
+
+[MIT](LICENSE)

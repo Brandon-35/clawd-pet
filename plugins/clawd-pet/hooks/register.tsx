@@ -183,7 +183,7 @@ export const register: Register = (on, options) => {
         hud = await usageOr($, t, hud)
         if (settings.toasts && hud && hud !== before) {
           for (const warning of gaugeWarnings(before, hud)) {
-            $.ui.toast(`${body?.name ?? 'clawd'}: ${warning}`, { timeoutMs: 10000 })
+            $.ui.toast(warning, { timeoutMs: 10000 })
           }
         }
         $.ui.invalidate('ui.render')
@@ -231,7 +231,7 @@ export const register: Register = (on, options) => {
     // A denied call counts for the pet's face, not as a failure: the user or a hook chose it.
     const errored = 'isError' in result && result.isError === true
     stats = countCall(stats, mode, typeof input.file_path === 'string' ? input.file_path : '', errored)
-    const streak = settings.toasts ? streakWarning(stats, body?.name ?? 'clawd') : undefined
+    const streak = settings.toasts ? streakWarning(stats) : undefined
     if (streak) {
       $.ui.toast(streak, { timeoutMs: 8000 })
     }
@@ -257,7 +257,7 @@ export const register: Register = (on, options) => {
       alert = false
       turnStartedAt = undefined
       stats = countTurn(stats, e.durationMs)
-      const recap = settings.toasts ? turnRecap(turnStats, stats, e.durationMs, e.reason, body?.name ?? 'clawd') : undefined
+      const recap = settings.toasts ? turnRecap(turnStats, stats, e.durationMs, e.reason) : undefined
       if (recap) {
         $.ui.toast(recap, { timeoutMs: 8000 })
       }
@@ -290,13 +290,7 @@ export const register: Register = (on, options) => {
     }
   })
 
-  on('command.run', { command: 'clawd' }, async $ => {
-    if (!body) {
-      body = await keptBody($)
-    }
-
-    return { text: statsReport(stats, await $.clock.now(), body.name, hud) }
-  })
+  on('command.run', { command: 'clawd' }, async $ => ({ text: statsReport(stats, await $.clock.now(), hud) }))
 
   on('tool.call', { tool: PREVIEW_THEME }, async ($, e) => {
     const { theme, path } = e as unknown as { theme?: unknown; path?: unknown }

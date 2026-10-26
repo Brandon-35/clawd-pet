@@ -10,6 +10,7 @@ import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
 import { previewPage } from './preview'
 import { readSettings } from './settings'
+import { countCall, countTurn, newStats, statsReport } from './stats'
 import { BODY_W, FACES, HEIGHT, MAX_MINIS, compose, crop, encodeCells, encodeSvg, trailWidth } from './pixels'
 import type { Body } from './pixels'
 import { GROUND_H, drawBand, layScene, obstacleSpans } from './scene'
@@ -107,6 +108,7 @@ export const register: Register = (on, options) => {
   let body: Body | undefined
   let hud: Hud | undefined
   let minis: Mini[] = []
+  let stats = newStats(0)
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
   let layoutOf: Body | undefined
@@ -129,6 +131,7 @@ export const register: Register = (on, options) => {
     const now = await $.clock.now()
     await update($, anim, () => ({ mode: 'idle', since: now, x: 0, dir: 1, tick: 0, target: '', working: false }))
     hud = await usageOr($, now, undefined)
+    stats = newStats(now)
     try {
       await $.tool.register({
         name: 'preview_theme',
@@ -160,6 +163,15 @@ export const register: Register = (on, options) => {
       })
     } catch {
       // Without the tools the pet still draws; only changing the theme is missing.
+    }
+    try {
+      await $.command.register({
+        name: 'clawd',
+        description: "Clawd's report on this session: turns, tool calls, failures, files edited, and what is left",
+        immediate: true,
+      })
+    } catch {
+      // Without the command the pet still draws and counts.
     }
 
     $.clock.every(TICK_MS, async () => {
@@ -194,7 +206,8 @@ export const register: Register = (on, options) => {
     }
     const t = await $.clock.now()
     activeTools += 1
-    activeMode = toolMode(e.tool)
+    const mode = toolMode(e.tool)
+    activeMode = mode
     const input = e as unknown as Record<string, unknown>
     activeTarget = settings.targets ? targetOf(e.tool, input) : ''
     lastToolAt = t
@@ -208,7 +221,9 @@ export const register: Register = (on, options) => {
       // A permission prompt for this call has been answered by now.
       alert = false
     }
-    if ('deny' in result || ('isError' in result && result.isError)) {
+    const failed = 'deny' in result || ('isError' in result && result.isError === true)
+    stats = countCall(stats, mode, typeof input.file_path === 'string' ? input.file_path : '', failed)
+    if (failed) {
       await update($, anim, a => fail(a, lastToolAt))
     }
 
@@ -228,6 +243,7 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined) {
       alert = false
       turnStartedAt = undefined
+      stats = countTurn(stats, e.durationMs)
       const t = await $.clock.now()
       await update($, anim, a => ended(a, e.reason, t))
     }
@@ -255,6 +271,14 @@ export const register: Register = (on, options) => {
     } finally {
       compacting = false
     }
+  })
+
+  on('command.run', { command: 'clawd' }, async $ => {
+    if (!body) {
+      body = await keptBody($)
+    }
+
+    return { text: statsReport(stats, await $.clock.now(), body.name, hud) }
   })
 
   on('tool.call', { tool: PREVIEW_THEME }, async ($, e) => {

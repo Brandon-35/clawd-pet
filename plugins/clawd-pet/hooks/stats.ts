@@ -53,3 +53,27 @@ export function statsReport(s: Stats, now: number, name: string, hud?: Hud) {
     ...(gauges.length > 0 ? [`- ${gauges.join(' · ')}`] : []),
   ].join('\n')
 }
+
+const RECAP_AFTER_MS = 30000 // a shorter turn ends while the user still watches
+
+/**
+ * The toast for a main-loop turn that ended for `reason` after `durationMs`, from the counts at its start and its
+ * end: what it did, or that it failed. Undefined for a short turn and for one the user stopped.
+ */
+export function turnRecap(start: Stats, end: Stats, durationMs: number, reason: 'answer' | 'aborted' | 'refusal' | 'error', name: string) {
+  if (durationMs < RECAP_AFTER_MS || reason === 'aborted') {
+    return undefined
+  }
+  const total = (s: Stats) => MODE_ORDER.reduce((n, m) => n + (s.calls[m] ?? 0), 0)
+  const calls = total(end) - total(start)
+  const files = end.files.length - start.files.length
+  const failed = end.failed - start.failed
+  const parts = [
+    ...(calls > 0 ? [plural(calls, 'tool call')] : []),
+    ...(files > 0 ? [`${plural(files, 'file')} edited`] : []),
+    ...(failed > 0 ? [`${failed} failed`] : []),
+  ]
+  const head = reason === 'answer' ? `done in ${fmtDuration(durationMs)}` : `the turn ended in ${reason === 'error' ? 'an error' : 'a refusal'} after ${fmtDuration(durationMs)}`
+
+  return `${name}: ${[head, ...parts].join(' · ')}`
+}

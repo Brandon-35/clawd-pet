@@ -6,11 +6,12 @@ export type Settings = {
   statusLine: boolean
   targets: boolean // the status line names files, patterns, commands, and hosts
   minis: boolean
+  toasts: boolean // the turn recaps and warnings
 }
 
 const PACE: Record<string, number> = { slow: 0.6, normal: 1, fast: 1.6 }
 
-export const DEFAULTS: Settings = { pace: 1, sleepAfterMs: 60000, hud: true, statusLine: true, targets: true, minis: true }
+export const DEFAULTS: Settings = { pace: 1, sleepAfterMs: 60000, hud: true, statusLine: true, targets: true, minis: true, toasts: true }
 
 const flag = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback)
 
@@ -28,5 +29,6 @@ export function readSettings(options: Readonly<Record<string, unknown>>): Settin
     statusLine: flag(options.statusLine, DEFAULTS.statusLine),
     targets: flag(options.targets, DEFAULTS.targets),
     minis: flag(options.minis, DEFAULTS.minis),
+    toasts: flag(options.toasts, DEFAULTS.toasts),
   }
 }

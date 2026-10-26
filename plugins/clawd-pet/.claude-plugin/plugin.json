@@ -60,6 +60,12 @@
       "title": "Subagent minis",
       "description": "A mini behind the pet for each running subagent.",
       "default": true
+    },
+    "toasts": {
+      "type": "boolean",
+      "title": "Toasts",
+      "description": "A recap when a long turn ends, and a warning when context, a rate limit, or a run of tool calls goes wrong.",
+      "default": true
     }
   }
 }

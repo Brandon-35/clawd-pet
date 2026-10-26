@@ -7,8 +7,8 @@ test('no options give the defaults', () => {
 })
 
 test('each option sets its setting', () => {
-  expect(readSettings({ speed: 'fast', sleepAfter: 300, hud: false, statusLine: false, targets: false, minis: false })).toEqual({
-    pace: 1.6, sleepAfterMs: 300000, hud: false, statusLine: false, targets: false, minis: false,
+  expect(readSettings({ speed: 'fast', sleepAfter: 300, hud: false, statusLine: false, targets: false, minis: false, toasts: false })).toEqual({
+    pace: 1.6, sleepAfterMs: 300000, hud: false, statusLine: false, targets: false, minis: false, toasts: false,
   })
 })
 

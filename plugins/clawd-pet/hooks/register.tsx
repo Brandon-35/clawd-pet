@@ -10,7 +10,7 @@ import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
 import { previewPage } from './preview'
 import { readSettings } from './settings'
-import { countCall, countTurn, newStats, statsReport } from './stats'
+import { countCall, countTurn, newStats, statsReport, turnRecap } from './stats'
 import { BODY_W, FACES, HEIGHT, MAX_MINIS, compose, crop, encodeCells, encodeSvg, trailWidth } from './pixels'
 import type { Body } from './pixels'
 import { GROUND_H, drawBand, layScene, obstacleSpans } from './scene'
@@ -109,6 +109,7 @@ export const register: Register = (on, options) => {
   let hud: Hud | undefined
   let minis: Mini[] = []
   let stats = newStats(0)
+  let turnStats = stats // the counts when the main loop's turn began
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
   let layoutOf: Body | undefined
@@ -235,6 +236,7 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined) {
       alert = false
       turnStartedAt = await $.clock.now()
+      turnStats = stats
     }
     return next(e)
   })
@@ -244,6 +246,10 @@ export const register: Register = (on, options) => {
       alert = false
       turnStartedAt = undefined
       stats = countTurn(stats, e.durationMs)
+      const recap = settings.toasts ? turnRecap(turnStats, stats, e.durationMs, e.reason, body?.name ?? 'clawd') : undefined
+      if (recap) {
+        $.ui.toast(recap, { timeoutMs: 8000 })
+      }
       const t = await $.clock.now()
       await update($, anim, a => ended(a, e.reason, t))
     }

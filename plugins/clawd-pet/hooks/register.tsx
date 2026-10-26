@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Anim, Mode } from '../types'
 import { TICK_MS, ended, fail, leapClipMs, step } from './anim'
-import { HUD_WINDOW_W, barWidth, frameColor, hudFrom, hudRows, mood, windowEdges } from './hud'
+import { HUD_WINDOW_W, barWidth, frameColor, gaugeWarnings, hudFrom, hudRows, mood, windowEdges } from './hud'
 import type { Hud } from './hud'
 import { minisOnScreen, reconcile } from './minis'
 import type { Mini } from './minis'
@@ -179,7 +179,13 @@ export const register: Register = (on, options) => {
       const t = await $.clock.now()
       beat += 1
       if (beat % USAGE_EVERY_BEATS === 0) {
+        const before = hud
         hud = await usageOr($, t, hud)
+        if (settings.toasts && hud && hud !== before) {
+          for (const warning of gaugeWarnings(before, hud)) {
+            $.ui.toast(`${body?.name ?? 'clawd'}: ${warning}`, { timeoutMs: 10000 })
+          }
+        }
         $.ui.invalidate('ui.render')
       }
       if (settings.minis && beat % AGENTS_EVERY_BEATS === 0) {

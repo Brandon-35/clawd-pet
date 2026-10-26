@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { SessionUsage } from 'claude-code'
 
-import { BAR_W, DETAIL_COLOR, HUD_WINDOW_W, barParts, barWidth, fmtMin, frameColor, hudFrom, hudRows, mood, windowEdges } from './hud'
+import { BAR_W, DETAIL_COLOR, HUD_WINDOW_W, barParts, barWidth, fmtMin, frameColor, gaugeWarnings, hudFrom, hudRows, mood, windowEdges } from './hud'
 
 const usage = (over: Partial<SessionUsage> = {}): SessionUsage => ({
   startedAt: 0,
@@ -94,4 +94,15 @@ test("a pet's HUD look relabels, recolors, and hides bars, and keeps the warning
   expect(hudRows(h, { hp: false, mp: false, st: false })).toEqual([])
   expect(frameColor({ frame: '#44aa44' })).toBe('#44aa44')
   expect(frameColor({})).toBe('#c9744f')
+})
+
+test('a gauge warns once as it falls to a mark, and again only after it climbs back', () => {
+  expect(gaugeWarnings({ hp: 25 }, { hp: 18 })).toEqual(['context 18% left: run /compact at a good stopping point'])
+  expect(gaugeWarnings({ hp: 18 }, { hp: 15 })).toEqual([])
+  expect(gaugeWarnings({ hp: 15 }, { hp: 9 })).toEqual(['context 9% left: run /compact at a good stopping point'])
+  expect(gaugeWarnings({ hp: 25 }, { hp: 5 })).toHaveLength(1)
+  expect(gaugeWarnings({ hp: 60, mp: 12 }, { hp: 60, mp: 8, mpResetsInMin: 72 })).toEqual(['5-hour limit 8% left, resets in 1h12m'])
+  expect(gaugeWarnings({ hp: 60, st: 11 }, { hp: 60, st: 10 })).toEqual(['7-day limit 10% left'])
+  expect(gaugeWarnings(undefined, { hp: 90, mp: 6 })).toEqual(['5-hour limit 6% left'])
+  expect(gaugeWarnings(undefined, { hp: 90 })).toEqual([])
 })

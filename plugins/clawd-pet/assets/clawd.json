@@ -1,0 +1,334 @@
+{
+  "name": "clawd",
+  "scale": 1,
+  "sprite": [
+    "..lllllllllld..",
+    "..ccccccccccd..",
+    "..ccccccccccd..",
+    "eeccccccccccdee",
+    "eeccccccccccdee",
+    "..ccccccccccd..",
+    "..ccccccccccd..",
+    "..ddddddddddd..",
+    "...g.g...g.g...",
+    "...g.g...g.g..."
+  ],
+  "palette": {
+    "c": "#d97757",
+    "l": "#f2a283",
+    "d": "#a84d33",
+    "e": "#d97757",
+    "g": "#a84d33",
+    "a": "#2b2233",
+    "y": "#e8aa38",
+    "b": "#6f8fc8",
+    "k": "#8a5a44",
+    "n": "#6b4433",
+    "p": "#5a8f5a",
+    "m": "#8c8496"
+  },
+  "eyes": [
+    [
+      3,
+      3
+    ],
+    [
+      9,
+      3
+    ]
+  ],
+  "eyeColor": "#2b2233",
+  "limbs": {
+    "arms": "e",
+    "legs": "g"
+  },
+  "mini": {
+    "top": "#f2a283",
+    "body": "#d97757",
+    "edge": "#a84d33"
+  },
+  "miniSprite": [
+    ".lll.",
+    "cacac",
+    "ccccd",
+    ".g.g."
+  ],
+  "props": {
+    "think": [
+      [
+        "y....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        "....."
+      ],
+      [
+        "y.y..",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        "....."
+      ],
+      [
+        "y.y.y",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        "....."
+      ]
+    ],
+    "agent": [
+      [
+        ".yyy.",
+        "yyyyy",
+        "yyyyy",
+        ".yyy.",
+        ".mmm.",
+        ".mmm.",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        "....."
+      ],
+      [
+        "y.y.y",
+        ".yyy.",
+        "yyyyy",
+        "yyyyy",
+        ".yyy.",
+        ".mmm.",
+        ".mmm.",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        "....."
+      ]
+    ],
+    "error": [
+      [
+        ".y...",
+        "yyy..",
+        ".y..y",
+        "...yy",
+        "....y",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        "....."
+      ],
+      [
+        "...y.",
+        "..yyy",
+        "y..y.",
+        "yy...",
+        "y....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        "....."
+      ]
+    ],
+    "cheer": [
+      [
+        "..y..",
+        ".yyy.",
+        "yyyyy",
+        ".yyy.",
+        "..y..",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        "....."
+      ],
+      [
+        ".....",
+        "..y..",
+        ".yyy.",
+        "..y..",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        ".....",
+        "....."
+      ]
+    ]
+  },
+  "lines": {
+    "idle": [
+      "…",
+      "ready when you are",
+      "stretching my legs",
+      "what are we making?"
+    ],
+    "sleep": [
+      "zzz…",
+      "resting my legs"
+    ],
+    "jump": [
+      "on it!",
+      "let’s go"
+    ],
+    "think": [
+      "hmm…",
+      "working it out",
+      "putting it together"
+    ],
+    "agent": [
+      "calling in a helper",
+      "a tiny Clawd heads out"
+    ],
+    "cheer": [
+      "done!",
+      "that went well",
+      "all wrapped up"
+    ],
+    "error": [
+      "oof",
+      "that did not work",
+      "trying another way"
+    ],
+    "abort": [
+      "okay, stopping",
+      "stopped",
+      "say the word"
+    ],
+    "compact": [
+      "packing up the context",
+      "making room to think"
+    ],
+    "alert": [
+      "you’re needed",
+      "waiting on you"
+    ]
+  },
+  "lineColors": {
+    "idle": "#c06a4b",
+    "think": "#b0805a",
+    "agent": "#c08a1e",
+    "cheer": "#c08a1e",
+    "error": "#c0473a",
+    "alert": "#c08a1e"
+  },
+  "hud": {
+    "frame": "#d97757",
+    "hp": {
+      "label": "HP",
+      "fill": [
+        "#a84d33",
+        "#f2a283"
+      ]
+    },
+    "mp": {
+      "label": "MP"
+    },
+    "st": {
+      "label": "ST"
+    }
+  },
+  "scene": {
+    "ground": [
+      "kkkkkkknkkkkkkkk",
+      "nnnknnnnnnnnknnn"
+    ],
+    "sky": [
+      "..yyy.......",
+      ".yy.......y.",
+      "yy..........",
+      "yy.....y....",
+      ".yy.........",
+      "..yyy......."
+    ],
+    "obstacles": [
+      [
+        "mmmmm..",
+        "mnnnmmm",
+        "mnnnm.m",
+        "mnnnmmm",
+        ".mmm..."
+      ],
+      [
+        "..dddd..",
+        ".bbbbbb.",
+        "kkkkkkkk",
+        ".yyyyyy."
+      ],
+      [
+        "..p..",
+        ".ppp.",
+        "p.p.p",
+        "ppppp",
+        "..p..",
+        ".kkk."
+      ]
+    ],
+    "decor": [
+      [
+        ".y.",
+        "yyy",
+        ".y.",
+        "...",
+        "...",
+        "...",
+        "...",
+        "...",
+        "...",
+        "...",
+        "...",
+        "...",
+        "...",
+        "...",
+        "..."
+      ],
+      [
+        "p.p",
+        ".p."
+      ]
+    ],
+    "every": 48
+  }
+}

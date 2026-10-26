@@ -14,7 +14,7 @@ import { BODY_W, FACES, HEIGHT, MAX_MINIS, compose, crop, encodeCells, encodeSvg
 import type { Body } from './pixels'
 import { GROUND_H, drawBand, layScene, obstacleSpans } from './scene'
 import type { SceneLayout } from './scene'
-import { lineColor, lineWidth, statusLine, targetOf, toolMode } from './status'
+import { clocked, lineColor, lineWidth, statusLine, targetOf, toolMode } from './status'
 import type { ToolMode } from './status'
 
 const ROWS = 10 // a cell is two pixels tall, so the frames are 20 px high
@@ -103,6 +103,7 @@ export const register: Register = (on, options) => {
   let showsError = false
   let alert = false // a notification waits on the user
   let compacting = false
+  let turnStartedAt: number | undefined // the main loop's turn running now
   let body: Body | undefined
   let hud: Hud | undefined
   let minis: Mini[] = []
@@ -218,6 +219,7 @@ export const register: Register = (on, options) => {
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
       alert = false
+      turnStartedAt = await $.clock.now()
     }
     return next(e)
   })
@@ -225,6 +227,7 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
       alert = false
+      turnStartedAt = undefined
       const t = await $.clock.now()
       await update($, anim, a => ended(a, e.reason, t))
     }
@@ -370,7 +373,8 @@ export const register: Register = (on, options) => {
       const drawn = a.leap ? { mode: 'jump' as const, ms: leapClipMs((now - a.leap.since) * settings.pace) } : { mode: a.mode, ms: elapsed * settings.pace }
       const picture = compose(body, drawn.mode, drawn.ms, a.dir, hud ? mood(hud) : 'ok', views)
       const extra = views.length > MAX_MINIS ? ` (+${views.length - MAX_MINIS} minis)` : ''
-      const line = settings.statusLine ? statusLine(a.mode, a.since, elapsed, a.target, body.look.lines[a.mode]) + extra : ''
+      const turnMs = turnStartedAt === undefined ? undefined : now - turnStartedAt
+      const line = settings.statusLine ? clocked(statusLine(a.mode, a.since, elapsed, a.target, body.look.lines[a.mode]), a.mode, turnMs, elapsed) + extra : ''
       if (showsError) {
         showsError = false
         $.ui.status(undefined)

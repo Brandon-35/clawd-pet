@@ -117,3 +117,25 @@ export function statusLine(mode: Mode, since: number, elapsedMs: number, target:
 
   return line.replace('{}', target || 'something')
 }
+
+/** A duration as the status line and toasts print it: `42s`, `3m 05s`, `1h 02m`. */
+export function fmtDuration(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  if (s >= 3600) {
+    return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`
+  }
+
+  return s >= 60 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`
+}
+
+const CLOCK_AFTER_MS = 5000 // a clock on a short wait is noise
+
+/**
+ * The status line with a clock after it: how long the turn has run while Claude works, or how long a notification
+ * has waited on the user. `turnMs` is undefined outside a turn. Short waits and the one-off modes get no clock.
+ */
+export function clocked(line: string, mode: Mode, turnMs: number | undefined, modeMs: number) {
+  const ms = mode === 'alert' ? modeMs : mode === 'cheer' || mode === 'error' || mode === 'abort' || mode === 'jump' ? undefined : turnMs
+
+  return line && ms !== undefined && ms >= CLOCK_AFTER_MS ? `${line} · ${fmtDuration(ms)}` : line
+}

@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { SessionUsage } from 'claude-code'
 
-import { BAR_W, DETAIL_COLOR, HUD_WINDOW_W, barParts, barWidth, fmtMin, fmtTokens, fmtUsd, frameColor, gaugeWarnings, hudFrom, hudLine, hudRows, mood, paceWarning, windowEdges } from './hud'
+import { BAR_W, DETAIL_COLOR, HUD_WINDOW_W, barParts, barWidth, fmtMin, fmtTokens, fmtUsd, frameColor, gaugeWarnings, hudFrom, hudLine, hudRight, hudRows, mood, paceWarning, windowEdges } from './hud'
 import type { HudPart } from './hud'
 
 const usage = (over: Partial<SessionUsage> = {}): SessionUsage => ({
@@ -154,4 +154,14 @@ test('the line style puts every bar on one row with MP reset, warnings, and cost
   expect(parts.filter(p => p.bold && p.text.endsWith(' ') && !p.text.startsWith(' ')).map(p => p.text)).toEqual(['HP ', 'MP ', 'ST '])
   expect(joined(hudLine({ hp: 8 }, { hp: { label: 'FUEL' } }))).toBe('FUEL ╸─────── 8% /compact')
   expect(hudLine({ hp: 50 }, { hp: false })).toEqual([])
+})
+
+test('the top edge names the other sessions waiting on the user before the cost, and the line style ends with them', () => {
+  expect(hudRight(1.24, 1)).toBe('✻ 1 waiting · $1.24')
+  expect(hudRight(1.24)).toBe('$1.24')
+  expect(hudRight(undefined, 2)).toBe('✻ 2 waiting')
+  expect(hudRight(undefined, 0)).toBe('')
+  expect(windowEdges(HUD_WINDOW_W, 'Clawd', hudRight(1.24, 1)).top).toContain(' ✻ 1 waiting · $1.24 ─╮')
+  expect(hudLine({ hp: 50, costUsd: 1.24 }, {}, {}, 1).map(p => p.text).join('').endsWith(' · $1.24 · ✻ 1 waiting')).toBe(true)
+  expect(hudLine({ hp: 50 }, { hp: false }, {}, 1).map(p => p.text).join('')).toBe('✻ 1 waiting')
 })

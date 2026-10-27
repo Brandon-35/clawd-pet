@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Anim, Mode } from '../types'
 import { TICK_MS, ended, fail, leapClipMs, needsUser, step } from './anim'
-import { HUD_WINDOW_W, barWidth, fmtUsd, frameColor, gaugeWarnings, hudFrom, hudLine, hudRows, mood, paceWarning, windowEdges } from './hud'
+import { HUD_WINDOW_W, barWidth, frameColor, gaugeWarnings, hudFrom, hudLine, hudRight, hudRows, mood, paceWarning, windowEdges } from './hud'
 import type { Hud } from './hud'
 import { HEAVY_TOKENS, estimateTokens, heaviestLine, heavyWarning, keepHeaviest } from './heavy'
 import type { Heavy } from './heavy'
@@ -18,7 +18,7 @@ import { previewPage } from './preview'
 import { newTurnChecks, noteCommand, noteEdit, untestedWarning } from './checks'
 import { forgetAll, forgetPath, noteRead, noteTokens, readKey, rereadWarning } from './reread'
 import type { Reads } from './reread'
-import { PEER_STALE_MS, livePeers, parseRecord, peersLine, peersReport } from './peers'
+import { PEER_STALE_MS, livePeers, parseRecord, peerEvents, peersLine, peersReport, waitingPeers } from './peers'
 import type { Peer } from './peers'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
@@ -39,6 +39,7 @@ const GROUND_ROWS = GROUND_H / 2
 const STATUS_ROOM = 20 // columns kept free beside a running pet for its status line
 const USAGE_EVERY_BEATS = 20
 const AGENTS_EVERY_BEATS = 5
+const PEERS_EVERY_BEATS = 100 // every 10 s: the other sessions' records, for their toasts and the HUD's waiting count
 // How long a rate limit's pace must run before it makes a forecast, so one burst does not.
 const PACE_MIN_MS = { mp: 15 * 60000, st: 2 * 3600000 }
 const SLOW_BEATS: Partial<Record<Mode, number>> = { idle: 2, sleep: 4 } // ticks per redraw while nothing moves fast
@@ -204,6 +205,8 @@ export const register: Register = (on, options) => {
   let shellCwd = ''
   let home = '' // the user's home, for the peers' records and their names
   let selfId = ''
+  let lastPeers: Peer[] | undefined // the other live sessions at the last read; undefined until the first read seeds it
+  let readingPeers = false
   let shellLast = { key: '', at: 0 }
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
@@ -231,6 +234,7 @@ export const register: Register = (on, options) => {
     heaviest = []
     reads = {}
     lastReadKey = ''
+    lastPeers = undefined
     await countToday($, now, { sessions: 1 })
     if (settings.shellStatus || settings.peers) {
       try {
@@ -325,6 +329,24 @@ export const register: Register = (on, options) => {
           await $.fs.write(shellPath, shellRecord(shell, t)).catch(() => {
             shellPath = undefined
           })
+        }
+      }
+
+      if (settings.peers && home && beat % PEERS_EVERY_BEATS === 0 && !readingPeers) {
+        readingPeers = true
+        try {
+          const now = await readPeers($, `${home}/${SHELL_DIR}`, t, selfId)
+          const events = lastPeers ? peerEvents(lastPeers, now, t, home) : []
+          const redraw = waitingPeers(now) !== waitingPeers(lastPeers ?? [])
+          lastPeers = now
+          for (const ev of settings.toasts ? events : []) {
+            await $.ui.toast(ev.text, { timeoutMs: 8000 })
+          }
+          if (redraw) {
+            $.ui.invalidate('ui.render')
+          }
+        } finally {
+          readingPeers = false
         }
       }
     })
@@ -622,7 +644,7 @@ export const register: Register = (on, options) => {
     const forecast = { turns: turnsLeft(hps), mpOutMin: gauges.mpOutMin, stOutMin: gauges.stOutMin }
     const { Box, Text } = $.ui.resolve(e)
     if (settings.hudStyle === 'line') {
-      const parts = hudLine(hud, body.look.hud, forecast)
+      const parts = hudLine(hud, body.look.hud, forecast, waitingPeers(lastPeers ?? []))
       if (parts.length === 0) {
         return next(e)
       }
@@ -645,7 +667,7 @@ export const register: Register = (on, options) => {
     if (rows.length === 0) {
       return next(e)
     }
-    const edges = windowEdges(width, body.name, hud.costUsd === undefined ? '' : fmtUsd(hud.costUsd))
+    const edges = windowEdges(width, body.name, hudRight(hud.costUsd, waitingPeers(lastPeers ?? [])))
     const frame = frameColor(body.look.hud)
 
     return (

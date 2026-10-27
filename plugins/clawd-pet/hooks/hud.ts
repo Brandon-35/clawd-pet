@@ -222,9 +222,9 @@ const LINE_BAR_W = 8 // cells of each bar in the one-line HUD
 
 /**
  * The HUD as one unframed row, for a small terminal: each shown bar with its label and reading, MP's reset time,
- * the amber run-out warnings, and the session's cost, joined with grey dots.
+ * the amber run-out warnings, the session's cost, and the other sessions waiting on the user, joined with grey dots.
  */
-export function hudLine(h: Hud, look: HudLook = {}, forecast: Forecast = {}): HudPart[] {
+export function hudLine(h: Hud, look: HudLook = {}, forecast: Forecast = {}, waiting = 0): HudPart[] {
   const parts: HudPart[] = []
   for (const r of hudRows(h, look, LINE_BAR_W)) {
     const read = r.parts[0]!
@@ -248,9 +248,18 @@ export function hudLine(h: Hud, look: HudLook = {}, forecast: Forecast = {}): Hu
   if (h.costUsd !== undefined) {
     parts.push({ text: `${parts.length > 0 ? ' · ' : ''}${fmtUsd(h.costUsd)}`, color: DETAIL_COLOR })
   }
+  if (waiting > 0) {
+    parts.push({ text: `${parts.length > 0 ? ' · ' : ''}${waitingText(waiting)}`, color: DETAIL_COLOR })
+  }
 
   return parts
 }
+
+const waitingText = (waiting: number) => `✻ ${waiting} waiting`
+
+/** The right of the HUD window's top edge: the other sessions waiting on the user, then the session's cost; '' for neither. */
+export const hudRight = (costUsd: number | undefined, waiting = 0) =>
+  [waiting > 0 ? waitingText(waiting) : '', costUsd === undefined ? '' : fmtUsd(costUsd)].filter(s => s !== '').join(' · ')
 
 /**
  * The window's edges as text, `width` cells across, corners included: rounded corners, the title at the left of the

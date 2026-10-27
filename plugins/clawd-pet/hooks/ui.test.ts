@@ -8,10 +8,10 @@ const BLOCK = { name: 'block', sprite: ['ddddddd', 'ddddddd', 'ddddddd', 'dddddd
 const CAT = { name: 'Mochi', sprite: ['k.....k', 'kkkkkkk', 'kwkkkwk', 'kkkkkkk'], palette: { k: '#e8a33d', w: '#fff4e0' }, eyes: [[0, 1], [4, 1]] }
 const usage: SessionUsage = { startedAt: 0, context: { window: 200000, percent: 14 }, rateLimits: [{ kind: 'five_hour', percentUsed: 38 }] }
 
-/** Answers what the mod asks of Claude Code, keeping its toasts in `toasts` and its usage from `readUsage`, and draws Claude Code's own hint line as one Text. Returns the mod's store, kept in memory. */
+/** Answers what the mod asks of Claude Code, keeping its toasts in `toasts` and its usage from `readUsage`, and draws Claude Code's own hint line as one Text. Returns the mod's store, kept in memory, with the test's clock. */
 function stubEngine(on: On, toasts: string[] = [], readUsage = (): SessionUsage => usage, readFile = (_path: string) => JSON.stringify(BLOCK)) {
   const store = new Map<string, unknown>()
-  mock.clock(on)
+  const clock = mock.clock(on)
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
   on('store.set', (_$, e) => {
     store.set(e.key, e.value)
@@ -36,7 +36,7 @@ function stubEngine(on: On, toasts: string[] = [], readUsage = (): SessionUsage 
     return { value: undefined }
   })
 
-  return store
+  return Object.assign(store, { clock })
 }
 
 test('the band draws the pet, and the hint line draws the HUD in its window', async ($, on) => {
@@ -307,4 +307,36 @@ test('with the Peer board off, /clawd peers reads no other session', { options: 
   const r = await $.command.run({ command: 'clawd', args: 'peers', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
   expect(r.text).toBe('The Peer board setting is off, so other sessions are not read.')
   expect(listed).toBe(false)
+})
+
+test('another session finishing a long turn or starting to wait toasts here, and the HUD counts the waiting', async ($, on) => {
+  const toasts: string[] = []
+  const files: Record<string, string> = {}
+  const record = (mode: string, cwd: string, turnStartedAt = '') => `1\t${mode}\t\t\t${cwd}\t72\t\t\t${turnStartedAt}\t${clock.now()}\t1\t\n`
+  const { clock } = stubEngine(on, toasts, () => usage, path => (path.startsWith('/home/u/') ? files[path.split('/').pop() ?? ''] ?? '' : JSON.stringify(BLOCK)))
+  on('env.get', () => ({ value: '/home/u' }))
+  on('session.id', () => ({ value: 'self' }))
+  on('session.root', () => ({ value: '/w/me' }))
+  on('fs.list', () => ({ value: Object.keys(files).map(name => ({ name, kind: 'file' as const, size: 1, mtimeMs: clock.now(), isLink: false })) }))
+  await $.session.start({ cwd: '/w/me', surface: 'terminal', isInteractive: true })
+  const peerToasts = () => toasts.filter(t => t.startsWith('✻'))
+
+  // The first read only seeds what the other sessions were doing.
+  files['a1.tsv'] = record('bash', '/w/api', '-25000')
+  files['b2.tsv'] = record('read', '/w/web', '0')
+  files['c3.tsv'] = record('alert', '/w/docs')
+  await clock.advance(10000)
+  expect(peerToasts()).toEqual([])
+
+  files['a1.tsv'] = record('idle', '/w/api')
+  files['b2.tsv'] = record('alert', '/w/web', '0')
+  await clock.advance(10000)
+  expect(peerToasts()).toEqual(['✻ web needs you', '✻ api finished (45s)'])
+
+  const hint = await $.ui.mount({ plugin: 'clawd-pet', surface: 'terminal', ...HINT })
+  expect(JSON.stringify(await hint.drawn())).toContain('✻ 2 waiting')
+  await hint.unmount()
+
+  await clock.advance(10000)
+  expect(peerToasts().length).toBe(2)
 })

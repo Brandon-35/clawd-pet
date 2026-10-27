@@ -94,7 +94,7 @@
     "peers": {
       "type": "boolean",
       "title": "Peer board",
-      "description": "/clawd peers lists your other live Claude Code sessions on this machine, from the files Shell status writes.",
+      "description": "/clawd peers lists your other live Claude Code sessions on this machine, from the files Shell status writes, toasts when one finishes a long turn or waits on you, and counts the waiting on the HUD.",
       "default": true
     }
   }

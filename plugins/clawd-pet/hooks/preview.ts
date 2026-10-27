@@ -1,6 +1,6 @@
 import type { Anim, Mode } from '../types'
 import { TICK_MS, leapClipMs, step } from './anim'
-import { HUD_WINDOW_W, fmtUsd, frameColor, hudLine, hudRows, windowEdges } from './hud'
+import { HUD_WINDOW_W, frameColor, hudLine, hudRight, hudRows, windowEdges } from './hud'
 import type { Forecast, Hud, HudPart } from './hud'
 import { BODY_W, FACES, HEIGHT, MODES, compose, composeFace } from './pixels'
 import type { Body, Canvas, Clip } from './pixels'
@@ -28,9 +28,10 @@ const WHEN: Record<Mode, string> = {
 }
 // What the status line names in each mode, for the lines that name something.
 const SAMPLE_TARGET: Partial<Record<Mode, string>> = { read: 'app.ts', search: 'useState', edit: 'app.ts', bash: 'npm test', web: 'docs.anthropic.com' }
-const SAMPLE_HUDS: [string, Hud, Forecast][] = [
-  ['Early in a session', { hp: 86, tokens: 28000, window: 200000, costUsd: 1.24, mp: 72, mpResetsInMin: 213, st: 64, stResetsInMin: 4560 }, { turns: 24 }],
-  ['Running low', { hp: 22, tokens: 156000, window: 200000, costUsd: 12.3, mp: 12, mpResetsInMin: 41, st: 9, stResetsInMin: 1500 }, { turns: 3, mpOutMin: 18, stOutMin: 600 }],
+// Each sample's last number is how many other sessions wait on the user.
+const SAMPLE_HUDS: [string, Hud, Forecast, number][] = [
+  ['Early in a session', { hp: 86, tokens: 28000, window: 200000, costUsd: 1.24, mp: 72, mpResetsInMin: 213, st: 64, stResetsInMin: 4560 }, { turns: 24 }, 1],
+  ['Running low', { hp: 22, tokens: 156000, window: 200000, costUsd: 12.3, mp: 12, mpResetsInMin: 41, st: 9, stResetsInMin: 1500 }, { turns: 3, mpOutMin: 18, stOutMin: 600 }, 0],
 ]
 const MOTION_FPS = 10
 const SCENE_W = 96 // columns of the sample band
@@ -117,10 +118,10 @@ export function previewPage(body: Body, notes: string[]): string {
     })
     .join('')
   const spans = (parts: HudPart[]) => parts.map(p => `<span style="color: ${p.color}${p.bold ? '; font-weight: bold' : ''}">${escapeHtml(p.text)}</span>`).join('')
-  const huds = SAMPLE_HUDS.map(([label, h, forecast]) => {
-    const edges = windowEdges(HUD_WINDOW_W, body.name, h.costUsd === undefined ? '' : fmtUsd(h.costUsd))
+  const huds = SAMPLE_HUDS.map(([label, h, forecast, waiting]) => {
+    const edges = windowEdges(HUD_WINDOW_W, body.name, hudRight(h.costUsd, waiting))
     const rows = hudRows(h, body.look.hud, undefined, forecast)
-    const line = hudLine(h, body.look.hud, forecast)
+    const line = hudLine(h, body.look.hud, forecast, waiting)
     const inside = rows.length === 0
       ? '<p>The pet hides every bar, so the HUD does not show.</p>'
       : `<pre class="hud" style="color: ${frameColor(body.look.hud)}">${escapeHtml(edges.top)}\n${rows

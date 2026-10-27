@@ -14,7 +14,7 @@ registerHooks({ resolve: (spec, ctx, next) => next(/^\.\.?\//.test(spec) && !/\.
 const plugin = new URL('../../plugins/clawd-pet/', import.meta.url)
 const hook = name => import(new URL(`hooks/${name}.ts`, plugin).href)
 const { TICK_MS, fail, leapClipMs, step } = await hook('anim')
-const { HUD_WINDOW_W, barWidth, fmtUsd, frameColor, hudRows, mood, windowEdges } = await hook('hud')
+const { HUD_WINDOW_W, barWidth, frameColor, hudRight, hudRows, mood, windowEdges } = await hook('hud')
 const { minisOnScreen } = await hook('minis')
 const { animate, readTheme } = await hook('theme')
 const { BODY_W, HEIGHT, MAX_MINIS, compose, crop, encodeCells, trailWidth } = await hook('pixels')
@@ -134,7 +134,7 @@ function screen(t, a, body, layout) {
   ops.push({ kind: 'text', row: prompt + 3, col: 2, text: '⏵⏵ auto mode on (shift+tab to cycle)', color: '#6b7499' })
 
   const hudW = Math.min(HUD_WINDOW_W, Math.max(24, COLS - 2))
-  const edges = windowEdges(hudW, body.name, fmtUsd(hud.costUsd))
+  const edges = windowEdges(hudW, body.name, hudRight(hud.costUsd, 0))
   const frame = frameColor(body.look.hud)
   const rows = hudRows(hud, body.look.hud, barWidth(hudW))
   const top = prompt + 4

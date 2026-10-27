@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { livePeers, namePeers, parseRecord, peersLine, peersReport } from './peers'
+import { livePeers, namePeers, parseRecord, peerEvents, peersLine, peersReport, waitingPeers } from './peers'
 import type { Peer } from './peers'
 import { shellRecord } from './shell'
 
@@ -65,4 +65,25 @@ test('the peers report shows eight and counts the rest', () => {
   const lines = peersReport(list, 0).split('\n')
   expect(lines.length).toBe(9)
   expect(lines.at(-1)).toBe('… and 3 more')
+})
+
+test('a peer whose turn of 30 s or more ended is finished; a shorter turn says nothing', () => {
+  const before = [peer('a', 'bash', '/w/api', { turnStartedAt: 0 }), peer('b', 'read', '/w/web', { turnStartedAt: 170000 })]
+  const now = [peer('a', 'idle', '/w/api'), peer('b', 'idle', '/w/web')]
+  expect(peerEvents(before, now, 185000)).toEqual([{ kind: 'finished', id: 'a', text: '✻ api finished (3m 05s)' }])
+  expect(peerEvents([peer('a', 'bash', '/w/api', { turnStartedAt: 0 })], [peer('a', 'cheer', '/w/api')], 30000).map(e => e.text)).toEqual(['✻ api finished (30s)'])
+})
+
+test('a peer that starts waiting on the user mid-turn needs you, once; the idle reminder after a turn does not', () => {
+  const working = [peer('a', 'bash', '/w/api', { turnStartedAt: 0 })]
+  const waiting = [peer('a', 'alert', '/w/api', { turnStartedAt: 0 })]
+  expect(peerEvents(working, waiting, 60000)).toEqual([{ kind: 'waiting', id: 'a', text: '✻ api needs you' }])
+  expect(peerEvents(waiting, waiting, 70000)).toEqual([])
+  expect(peerEvents([peer('a', 'idle', '/w/api')], [peer('a', 'alert', '/w/api')], 70000)).toEqual([])
+  expect(waitingPeers([...waiting, peer('b', 'idle', '/w/web')])).toBe(1)
+})
+
+test('a peer seen for the first time or gone makes no event', () => {
+  expect(peerEvents([], [peer('a', 'alert', '/w/api'), peer('b', 'idle', '/w/web')], 60000)).toEqual([])
+  expect(peerEvents([peer('a', 'bash', '/w/api', { turnStartedAt: 0 })], [], 60000)).toEqual([])
 })

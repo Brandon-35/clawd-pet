@@ -93,7 +93,7 @@ Run `/clawd peers` for your other live Claude Code sessions on this machine, the
 - docs · idle · HP 90%
 ```
 
-It reads the files each session writes for the zsh prompt, so it sees only sessions with **Shell status** on. Plain `/clawd` adds one line, `- peers: 3 live, 1 needs you`, when any is live. The **Peer board** setting turns both off.
+It reads the files each session writes for the zsh prompt, so it sees only sessions with **Shell status** on. Plain `/clawd` adds one line, `- peers: 3 live, 1 needs you`, when any is live. Every 10 seconds the mod also checks them: a toast says when one finishes a turn of 30 seconds or more (`✻ api finished (3m 05s)`) or starts waiting on you (`✻ api needs you`), and the HUD's top edge counts the ones waiting (`✻ 1 waiting · $1.24`). The **Peer board** setting turns all of it off.
 
 ## The HUD
 
@@ -173,7 +173,7 @@ Run `/plugin configure clawd-pet@clawd-pet` in a session.
 | Subagent minis | on | One mini per running subagent behind the pet. |
 | Toasts | on | The recap after a long turn, and the warnings for failing or repeated calls, low context, and low or fast-falling rate limits. |
 | Shell status | on | Write each session's state to `~/.cache/clawd-pet/sessions/` for the zsh prompt. |
-| Peer board | on | `/clawd peers` lists your other live sessions on this machine, read from those files. |
+| Peer board | on | `/clawd peers` lists your other live sessions on this machine, read from those files; a toast says when one finishes a long turn or waits on you, and the HUD counts the waiting. |
 | Notify after (seconds) | `120` | A turn at least this long ends with a desktop notification. `0` turns it off; under `30` counts as `30`. |
 
 Or from a shell, then restart Claude Code:
@@ -207,7 +207,7 @@ A mod runs inside Claude Code with your permissions. clawd-pet:
 - sends a desktop notification through Claude Code when a long turn ends, if **Notify after** is not `0`;
 - registers three tools for themes: `get_theme` returns the current theme, `preview_theme` writes a preview page to the path Claude gives it, and `set_theme` stores a theme in the mod's own store;
 - writes one small file per session to `~/.cache/clawd-pet/sessions/` for the zsh prompt, unless **Shell status** is off: the mode, line color, status line, session folder, HP, MP, ST, and timestamps;
-- reads the other sessions' files in that folder for `/clawd peers`, unless **Peer board** is off: it prints them and never acts on their text;
+- reads the other sessions' files in that folder for `/clawd peers`, its toasts and the HUD's waiting count, unless **Peer board** is off: it shows them and never acts on their text;
 - makes no network requests and starts no processes, and reads one environment variable, `HOME`, to find that folder.
 
 The zsh plugin reads those files with zsh builtins and deletes ones a dead session left for a day; it starts no process either.

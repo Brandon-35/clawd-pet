@@ -88,3 +88,39 @@ export function peersLine(list: Peer[]) {
 
   return list.length === 0 ? '' : `- peers: ${list.length} live${waiting > 0 ? `, ${waiting} needs you` : ''}`
 }
+
+/** A turn shorter than this ends without a toast in the other sessions. */
+export const PEER_LONG_TURN_MS = 30000
+
+/** What changed in another session between two reads that the user should hear about from here. */
+export type PeerEvent = { kind: 'finished' | 'waiting'; id: string; text: string }
+
+/**
+ * The events between the live peers `before` and `now`, read at `at`: a peer that started waiting on the user, and one
+ * whose turn of 30 s or more ended. A peer seen for the first time, or gone, makes none.
+ */
+export function peerEvents(before: Peer[], now: Peer[], at: number, home = ''): PeerEvent[] {
+  const was = new Map(before.map(p => [p.id, p]))
+  const names = namePeers(now, home)
+  const events: PeerEvent[] = []
+  now.forEach((p, i) => {
+    const b = was.get(p.id)
+    if (!b) {
+      return
+    }
+    if (p.mode === 'alert') {
+      // Only mid-turn, as at a permission prompt: the idle reminder after a turn would repeat its finish.
+      if (b.mode !== 'alert' && p.turnStartedAt !== undefined) {
+        events.push({ kind: 'waiting', id: p.id, text: `✻ ${names[i]} needs you` })
+      }
+    } else if (b.turnStartedAt !== undefined && p.turnStartedAt === undefined && at - b.turnStartedAt >= PEER_LONG_TURN_MS) {
+      // Any mode but waiting: a read can land on the cheer between a turn's end and idle.
+      events.push({ kind: 'finished', id: p.id, text: `✻ ${names[i]} finished (${fmtDuration(at - b.turnStartedAt)})` })
+    }
+  })
+
+  return events
+}
+
+/** How many of the live peers wait on the user. */
+export const waitingPeers = (list: Peer[]) => list.filter(p => p.mode === 'alert').length

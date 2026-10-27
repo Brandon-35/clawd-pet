@@ -62,10 +62,14 @@ Clawd speaks up in a toast when something needs your eyes:
 | --- | --- |
 | A turn of 30 seconds or more ends | `done in 2m 14s · 18 tool calls · 3 files edited · 1 failed`, or that it ended in an error |
 | Three tool calls fail in a row (and every three after) | `3 tool calls failed in a row. Press Esc to step in if Claude is stuck.` |
-| Context left falls to 20 %, then to 10 % | `context 18% left: run /compact at a good stopping point` |
+| The same command, file read, search, or fetch runs a third time with no edit between | `` `$ npm test` ran 3 times with no edit between. Claude may be going in circles. `` |
+| Context left falls to 20 %, then to 10 % | `context 18% left (about 3 turns at this pace): run /compact at a good stopping point` |
 | The 5-hour or 7-day limit falls to 10 % | `5-hour limit 8% left, resets in 1h12m` |
+| A limit's pace will run it out before it resets | `at this pace the 5-hour limit runs out in about 40m, before it resets in 2h10m` |
 
-Each gauge warns once on the way down, and again only if it climbs back first. A turn you stop yourself ends quietly. The **Toasts** setting turns all of these off.
+Each gauge warns once on the way down, and again only if it climbs back first. The pace warning needs 15 minutes of readings for the 5-hour limit and 2 hours for the 7-day one, and warns once per window. An edit between two identical calls starts their count over, so running the tests after each fix does not warn. A turn you stop yourself ends quietly. The **Toasts** setting turns all of these off.
+
+A turn of two minutes or more also ends with a desktop notification carrying the same recap, through the notification channel you chose in Claude Code, for when you have looked away. Change the wait or turn it off with the **Notify after** setting.
 
 Run `/clawd` at any time, even mid-turn, for a report on the session so far:
 
@@ -75,10 +79,11 @@ report on this session, 1h 02m in:
 - 182 tool calls: 60 read, 40 search, 30 edit, 45 bash, 5 web, 2 agent
 - 7 failed (4%)
 - 12 files edited
-- context 64% left · 5-hour limit 80% left, resets in 2h10m
+- context 64% left (about 9 turns at this pace) · 5-hour limit 80% left, resets in 2h10m
+- today, in every session: 3 sessions, 41 turns, 1h 52m of work, 520 tool calls
 ```
 
-A failed call is one that ran and returned an error; a call you deny does not count. The counts start over with each session.
+A failed call is one that ran and returned an error; a call you deny does not count. The session counts start over with each session; the last line adds up the whole local day across sessions. The context forecast follows the last few turns and starts over after a compaction; a limit runs out "at this pace" only when that comes before its reset.
 
 ## The HUD
 
@@ -128,7 +133,8 @@ Run `/plugin configure clawd-pet@clawd-pet` in a session.
 | Status line | on | The text beside the pet. |
 | Name files and commands | on | Show the file, pattern, command, host, or query each tool works on. |
 | Subagent minis | on | One mini per running subagent behind the pet. |
-| Toasts | on | The recap after a long turn, and the warnings for failing calls, low context, and low rate limits. |
+| Toasts | on | The recap after a long turn, and the warnings for failing or repeated calls, low context, and low or fast-falling rate limits. |
+| Notify after (seconds) | `120` | A turn at least this long ends with a desktop notification. `0` turns it off; under `30` counts as `30`. |
 
 Or from a shell, then restart Claude Code:
 
@@ -136,7 +142,7 @@ Or from a shell, then restart Claude Code:
 echo '{"speed": "fast", "sleepAfter": "300"}' | claude plugin configure clawd-pet@clawd-pet --values-stdin
 ```
 
-The install may say "7 userConfig options not yet set". Every setting has a default, so nothing is needed.
+The install may say "8 userConfig options not yet set". Every setting has a default, so nothing is needed.
 
 ## Update
 
@@ -157,10 +163,12 @@ A mod runs inside Claude Code with your permissions. clawd-pet:
 
 - reads its own theme, polls session usage and the subagent list, and draws;
 - registers the `/clawd` command, which prints counts it keeps in memory for the session;
+- keeps the day's totals (sessions, turns, time worked, tool calls) in its own store, as numbers only;
+- sends a desktop notification through Claude Code when a long turn ends, if **Notify after** is not `0`;
 - registers three tools for themes: `get_theme` returns the current theme, `preview_theme` writes a preview page to the path Claude gives it, and `set_theme` stores a theme in the mod's own store;
 - makes no network requests, starts no processes, and reads no environment variables.
 
-Its tool hook sees each tool's input but keeps only a short target for the status line: for `Bash`, the command's first line cut to 24 characters. For `/clawd` it also keeps the paths of edited files, in memory only, to count each file once; the report prints the count, never the paths. The turn hooks read only when a turn starts and ends, how long it took, and why it ended. The notification hook only notes that a notification arrived; it never reads the text.
+Its tool hook sees each tool's input but keeps only a short target for the status line: for `Bash`, the command's first line cut to 24 characters. For `/clawd` it also keeps the paths of edited files, in memory only, to count each file once; the report prints the count, never the paths. To spot repeated calls it keeps, in memory and only until the next edit, each call's command, path, pattern, URL, or query. The turn hooks read only when a turn starts and ends, how long it took, and why it ended. The notification hook only notes that a notification arrived and whether a plugin sent it; it never reads the text.
 
 To check, run `claude plugin validate plugins/clawd-pet` on a clone. Its `calls:` line lists every Claude Code API the mod uses.
 

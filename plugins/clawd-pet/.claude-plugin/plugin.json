@@ -1,6 +1,6 @@
 {
   "name": "clawd-pet",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Clawd, a pixel-art pet above the prompt that acts out each tool call, plus an HP/MP/ST HUD below it",
   "author": {
     "name": "Brandon Ta"

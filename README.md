@@ -1,18 +1,42 @@
 <h1 align="center">clawd-pet</h1>
 
 <p align="center">
-  Clawd lives above your Claude Code prompt and acts out every tool call as it happens.<br>
-  Below the prompt, a small HUD tracks the context window and your rate limits.
+  <b>A pixel-art pet and a live HUD for Claude Code.</b><br>
+  Clawd acts out every tool call above your prompt. The HUD below it tracks context, rate limits and spend,<br>
+  and quiet toasts tell you when Claude burns tokens, loops, or waits on you. None of it costs a single model token.
 </p>
 
 <p align="center">
+  <a href="https://github.com/Brandon-35/clawd-pet/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Brandon-35/clawd-pet?color=d97757&label=release"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-d97757"></a>
   <img alt="Claude Code 2.1.287 or later" src="https://img.shields.io/badge/Claude_Code-2.1.287+-e8aa38">
+  <img alt="Zero model tokens" src="https://img.shields.io/badge/model_tokens-0-5b8a72">
+  <img alt="No network requests" src="https://img.shields.io/badge/network-none-6b7499">
 </p>
 
 <p align="center">
-  <img src="docs/images/demo.gif" width="806" alt="A terminal session: Clawd reads a file, searches, sends a mini off with a subagent, runs a failing command, edits, and cheers when the turn is done">
+  <img src="docs/images/demo.gif" width="806" alt="A terminal session: Clawd reads a file, searches, sends a mini off with a subagent, runs a failing command, edits, and cheers when the turn is done, above a HUD with HP, MP and ST bars and the session's cost">
 </p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#what-clawd-does">The pet</a> ·
+  <a href="#toasts-and-clawd">Toasts and /clawd</a> ·
+  <a href="#the-hud">The HUD</a> ·
+  <a href="#in-your-zsh-prompt">zsh prompt</a> ·
+  <a href="#settings">Settings</a> ·
+  <a href="#privacy-and-security">Privacy</a>
+</p>
+
+## Why use it
+
+- **See what Claude is doing at a glance.** Clawd reads, searches, edits, runs commands and fetches pages as Claude does, and names the file or command beside it.
+- **Know your budget before you hit a wall.** HP is the context left, MP the 5-hour limit, ST the 7-day limit, each with a forecast: about how many turns are left, and when a limit runs out at this pace.
+- **Waste fewer tokens.** Toasts flag a tool result that floods the context, a file read again while still in context, a prompt cache gone cold, calls repeated in a loop, and a turn that edited code without running a check.
+- **Get more from the advisor.** It warns when your advisor model is not stronger than the main model, so Claude Code never calls it, and fills in the fix. It counts each advisor call.
+- **Run several sessions at once.** `/clawd peers` lists your other live sessions with their folders; a toast says when one finishes or needs you; `/clawd send` and `/clawd note` pass messages between them.
+- **Stay in your shell.** An Oh My Zsh plugin shows each session's state in your prompt, with `clawd-status` and `clawd-wait`.
+- **Make it yours.** Ask Claude to draw a new pet: the theme format covers the sprite, props, scene, status lines and HUD colors.
 
 ## Install
 

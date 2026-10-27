@@ -5,7 +5,7 @@ import type { Repeats } from './loops'
 
 test('a call is keyed by its tool and main input', () => {
   expect(callKey('Bash', { command: 'npm test' })).toBe('Bash\nnpm test')
-  expect(callKey('Read', { file_path: '/a.ts', offset: 10 })).toBe('Read\n/a.ts')
+  expect(callKey('Read', { file_path: '/a.ts', offset: 10 })).toBeUndefined()
   expect(callKey('Edit', { file_path: '/a.ts' })).toBeUndefined()
   expect(callKey('Bash', {})).toBeUndefined()
 })

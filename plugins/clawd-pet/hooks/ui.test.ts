@@ -150,6 +150,34 @@ test('preview_theme writes the preview and leaves the pet on screen alone', asyn
   expect(nowhere.deny ?? nowhere.text).toContain('`path` is the HTML file to write')
 })
 
+test('a re-read of an unchanged file toasts once, and an edit or a change on disk makes the next read new', async ($, on) => {
+  const toasts: string[] = []
+  stubEngine(on, toasts)
+  let mtimeMs = 1000
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs, isLink: false } }))
+  on('tool.call', () => ({ result: 'ok' }))
+  mock.session(on)
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+
+  const read = () => $.tool.call({ tool: 'Read', file_path: '/repo/src/app.ts' })
+  await read()
+  const content = [{ type: 'tool_result', tool_use_id: 't1', content: 'x'.repeat(16800) }]
+  const row = { type: 'user', role: 'user', content } as const
+  await $.session.append({ message: row, door: 'tool-result', origin: { kind: 'tool', tool: 'Read' }, uuid: 'u1' })
+  await read()
+  await read()
+  const rereads = () => toasts.filter(t => t.includes('already in context'))
+  expect(rereads()).toEqual(['app.ts is already in context, unchanged since it was read this turn (~4.2k tokens)'])
+
+  await $.tool.call({ tool: 'Edit', file_path: '/repo/src/app.ts', old_string: 'a', new_string: 'b' })
+  await read()
+  mtimeMs = 2000
+  await read()
+  expect(rereads().length).toBe(1)
+  const report = await $.command.run({ command: 'clawd', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(report.text).toContain('- re-reads: 2')
+})
+
 test('a heavy tool result toasts once and lands in the report, and the row goes on unchanged', async ($, on) => {
   const toasts: string[] = []
   stubEngine(on, toasts)

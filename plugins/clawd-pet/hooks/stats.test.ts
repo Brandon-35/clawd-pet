@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { countCall, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
+import { countCall, countReread, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
 
 test('tool calls count by kind, failures add up, and each edited file counts once', () => {
   let s = newStats(0)
@@ -59,4 +59,9 @@ test('three failed calls in a row warn, a success starts the count over', () => 
   expect(streakWarning(fails(newStats(0), 6))).toContain('6 tool calls')
   expect(streakWarning(countCall(fails(newStats(0), 2), 'read', '', false))).toBeUndefined()
   expect(streakWarning({ ...newStats(0), streak: undefined })).toBeUndefined()
+})
+
+test('the report counts re-reads only when there were some', () => {
+  expect(statsReport(newStats(0), 0)).not.toContain('re-reads')
+  expect(statsReport(countReread(countReread(newStats(0))), 0).split('\n').pop()).toBe('- re-reads: 2')
 })

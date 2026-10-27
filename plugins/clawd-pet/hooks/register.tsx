@@ -15,10 +15,12 @@ import type { LimitPace } from './pace'
 import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
 import { previewPage } from './preview'
+import { forgetAll, forgetPath, noteRead, noteTokens, readKey, rereadWarning } from './reread'
+import type { Reads } from './reread'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
 import type { ShellState } from './shell'
-import { callCount, countCall, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
+import { callCount, countCall, countReread, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
 import { addToday, dayOf, readToday, todayLine } from './today'
 import { BODY_W, FACES, HEIGHT, MAX_MINIS, compose, crop, encodeCells, encodeSvg, trailWidth } from './pixels'
 import type { Body } from './pixels'
@@ -43,6 +45,7 @@ const OWN_TOOLS = 'mcp__clawd-pet__'
 const SET_THEME = 'mcp__clawd-pet__set_theme'
 const PREVIEW_THEME = 'mcp__clawd-pet__preview_theme'
 const GET_THEME = 'mcp__clawd-pet__get_theme'
+const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
 
 const anim = atom({ plugin: 'clawd-pet', key: 'anim' } as const, {
   mode: 'idle',
@@ -163,6 +166,8 @@ export const register: Register = (on, options) => {
   let repeats: Repeats = {}
   let hps: number[] = [] // the context left at the end of recent turns
   let heaviest: Heavy[] = [] // the session's heaviest tool results, for the report
+  let reads: Reads = {} // what the main loop read and the context still holds
+  let lastReadKey = '' // the main loop's latest Read, to size its result
   const lastTargets = new Map<string, string>() // the target of each tool's latest call, to name its result
   let shellPath: string | undefined // this session's record for the zsh plugin, once its home and id are known
   let shellCwd = ''
@@ -191,6 +196,8 @@ export const register: Register = (on, options) => {
     gauges = { ...gauges, hud: await usageOr($, now, undefined) }
     stats = newStats(now)
     heaviest = []
+    reads = {}
+    lastReadKey = ''
     await countToday($, now, { sessions: 1 })
     if (settings.shellStatus) {
       try {
@@ -306,6 +313,16 @@ export const register: Register = (on, options) => {
       lastTargets.set(e.tool, target)
     }
     lastToolAt = t
+    // Noted before the call runs, so its result row finds the entry to size.
+    const readAt = e.tool === 'Read' && e.agentId === undefined ? readKey(input) : undefined
+    let reread: ReturnType<typeof noteRead>['again']
+    if (readAt !== undefined) {
+      const stat = typeof input.file_path === 'string' ? await $.fs.stat(input.file_path).catch(() => undefined) : undefined
+      const noted = noteRead(reads, readAt, t, stats.turns, stat?.mtimeMs)
+      reads = noted.reads
+      reread = noted.again
+      lastReadKey = readAt
+    }
 
     let result: Awaited<ReturnType<typeof next>>
     try {
@@ -319,6 +336,21 @@ export const register: Register = (on, options) => {
     // A denied call counts for the pet's face, not as a failure: the user or a hook chose it.
     const errored = 'isError' in result && result.isError === true
     stats = countCall(stats, mode, typeof input.file_path === 'string' ? input.file_path : '', errored)
+    const failed = errored || 'deny' in result
+    if (readAt !== undefined && failed && !reread) {
+      // A failed or denied read put nothing in the context.
+      reads = Object.fromEntries(Object.entries(reads).filter(([k]) => k !== readAt))
+    }
+    if (reread && !failed) {
+      stats = countReread(stats)
+      if (settings.toasts && !reread.told) {
+        $.ui.toast(rereadWarning(target, reread), { timeoutMs: 8000 })
+      }
+    }
+    const edited = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : ''
+    if (EDIT_TOOLS.includes(e.tool) && edited !== '') {
+      reads = forgetPath(reads, edited)
+    }
     const again = repeat(repeats, mode, errored ? undefined : callKey(e.tool, input))
     repeats = again.repeats
     // A failing call already warns through the streak; this catches a loop of calls that succeed.
@@ -330,7 +362,7 @@ export const register: Register = (on, options) => {
     if (streak) {
       $.ui.toast(streak, { timeoutMs: 8000 })
     }
-    if (errored || 'deny' in result) {
+    if (failed) {
       await update($, anim, a => fail(a, lastToolAt))
     }
 
@@ -342,6 +374,9 @@ export const register: Register = (on, options) => {
     const tool = e.origin.kind === 'tool' ? e.origin.tool : undefined
     if (e.agentId === undefined && tool !== undefined && !tool.startsWith(OWN_TOOLS)) {
       const tokens = estimateTokens(e.message.content)
+      if (tool === 'Read') {
+        reads = noteTokens(reads, lastReadKey, tokens)
+      }
       if (tokens >= HEAVY_TOKENS) {
         const target = lastTargets.get(tool) ?? ''
         heaviest = keepHeaviest(heaviest, { tool, target, tokens })
@@ -424,6 +459,8 @@ export const register: Register = (on, options) => {
       return await next(e)
     } finally {
       compacting = false
+      // The earlier reads are summarized away, so reading them again is fair.
+      reads = forgetAll()
     }
   })
 

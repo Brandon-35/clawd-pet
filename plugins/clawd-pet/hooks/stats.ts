@@ -15,6 +15,7 @@ export type Stats = {
   failed: number
   files: string[] // each file an edit touched, once
   streak?: number // failed tool calls in a row, up to now
+  rereads?: number // reads of a file the context already held unchanged
 }
 
 export const newStats = (since: number): Stats => ({ since, turns: 0, workMs: 0, calls: {}, failed: 0, files: [] })
@@ -34,6 +35,9 @@ export function countCall(s: Stats, mode: ToolMode, file: string, failed: boolea
 
 /** `s` after a main-loop turn that took `durationMs`. */
 export const countTurn = (s: Stats, durationMs: number): Stats => ({ ...s, turns: s.turns + 1, workMs: s.workMs + Math.max(0, durationMs) })
+
+/** `s` after one read of something the context already held. */
+export const countReread = (s: Stats): Stats => ({ ...s, rereads: (s.rereads ?? 0) + 1 })
 
 /** All the tool calls `s` counted. */
 export const callCount = (s: Stats) => MODE_ORDER.reduce((n, m) => n + (s.calls[m] ?? 0), 0)
@@ -57,6 +61,7 @@ export function statsReport(s: Stats, now: number, hud?: Hud, forecast: Forecast
     `- ${plural(calls, 'tool call')}${kinds.length > 0 ? `: ${kinds.join(', ')}` : ''}`,
     `- ${s.failed} failed${share}`,
     `- ${plural(s.files.length, 'file')} edited`,
+    ...((s.rereads ?? 0) > 0 ? [`- re-reads: ${s.rereads}`] : []),
     ...(gauges.length > 0 ? [`- ${gauges.join(' · ')}`] : []),
   ].join('\n')
 }

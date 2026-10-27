@@ -1,7 +1,8 @@
 import type { ToolMode } from './status'
 
 const LOOP_WARN = 3
-const KEY_INPUT: Record<string, string> = { Bash: 'command', Read: 'file_path', Grep: 'pattern', Glob: 'pattern', WebFetch: 'url', WebSearch: 'query' }
+// Reads are left to reread.ts, which tells a repeat from paging through a file.
+const KEY_INPUT: Record<string, string> = { Bash: 'command', Grep: 'pattern', Glob: 'pattern', WebFetch: 'url', WebSearch: 'query' }
 
 /** How many times each call has run since the last edit, by the call's key. */
 export type Repeats = Record<string, number>

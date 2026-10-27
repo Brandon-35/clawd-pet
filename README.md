@@ -95,6 +95,15 @@ Run `/clawd peers` for your other live Claude Code sessions on this machine, the
 
 It reads the files each session writes for the zsh prompt, so it sees only sessions with **Shell status** on. Plain `/clawd` adds one line, `- peers: 3 live, 1 needs you`, when any is live. Every 10 seconds the mod also checks them: a toast says when one finishes a turn of 30 seconds or more (`✻ api finished (3m 05s)`) or starts waiting on you (`✻ api needs you`), and the HUD's top edge counts the ones waiting (`✻ 1 waiting · $1.24`). The **Peer board** setting turns all of it off.
 
+Run `/clawd send <session> <message>` to message one of them without spending a turn here:
+
+```text
+/clawd send api the migration is merged, rebase before you push
+sent to api
+```
+
+Name the session as `/clawd peers` does, the start of that name, or the first 4 characters of its id when two share a folder. It needs **Peer board** on. The other session's model reads the message, so it costs that session a turn, not this one.
+
 ## The HUD
 
 A rounded window under the prompt, titled with the pet's name:
@@ -208,6 +217,7 @@ A mod runs inside Claude Code with your permissions. clawd-pet:
 - registers three tools for themes: `get_theme` returns the current theme, `preview_theme` writes a preview page to the path Claude gives it, and `set_theme` stores a theme in the mod's own store;
 - writes one small file per session to `~/.cache/clawd-pet/sessions/` for the zsh prompt, unless **Shell status** is off: the mode, line color, status line, session folder, HP, MP, ST, and timestamps;
 - reads the other sessions' files in that folder for `/clawd peers`, its toasts and the HUD's waiting count, unless **Peer board** is off: it shows them and never acts on their text;
+- sends `/clawd send` messages only to your own live sessions on this machine found in those files, over Claude Code's local channel, with no network;
 - makes no network requests and starts no processes, and reads one environment variable, `HOME`, to find that folder.
 
 The zsh plugin reads those files with zsh builtins and deletes ones a dead session left for a day; it starts no process either.

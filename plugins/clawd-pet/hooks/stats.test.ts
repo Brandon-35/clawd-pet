@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { countCall, countCompaction, countReread, countTurn, countUntested, newStats, statsReport, streakWarning, turnCost, turnRecap } from './stats'
+import { countCall, countCompaction, countReread, countSent, countTurn, countUntested, newStats, statsReport, streakWarning, turnCost, turnRecap } from './stats'
 
 test('tool calls count by kind, failures add up, and each edited file counts once', () => {
   let s = newStats(0)
@@ -103,4 +103,9 @@ test('the report names the session cost and the last turn\'s, and leaves out wha
   expect(statsReport(s, 0, { hp: 50, costUsd: 0 })).not.toContain('cost')
   const old: ReturnType<typeof newStats> = { since: 0, turns: 1, workMs: 0, calls: {}, failed: 0, files: [] }
   expect(statsReport(old, 0, { hp: 50, costUsd: 2 })).toContain('- cost: $2.00 this session\n')
+})
+
+test('the report counts messages sent only when there were some', () => {
+  expect(statsReport(newStats(0), 0)).not.toContain('messages sent')
+  expect(statsReport(countSent(countSent(newStats(0))), 0).split('\n').pop()).toBe('- messages sent: 2')
 })

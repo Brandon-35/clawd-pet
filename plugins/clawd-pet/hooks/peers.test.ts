@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { livePeers, namePeers, parseRecord, peerEvents, peersLine, peersReport, waitingPeers } from './peers'
+import { findPeer, livePeers, namePeers, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
 import type { Peer } from './peers'
 import { shellRecord } from './shell'
 
@@ -86,4 +86,34 @@ test('a peer that starts waiting on the user mid-turn needs you, once; the idle 
 test('a peer seen for the first time or gone makes no event', () => {
   expect(peerEvents([], [peer('a', 'alert', '/w/api'), peer('b', 'idle', '/w/web')], 60000)).toEqual([])
   expect(peerEvents([peer('a', 'bash', '/w/api', { turnStartedAt: 0 })], [], 60000)).toEqual([])
+})
+
+test('parseSend reads the peer and the message, and refuses a send with no message or another command', () => {
+  expect(parseSend('send api  run the tests now ')).toEqual({ peer: 'api', text: 'run the tests now' })
+  expect(parseSend(' send a1b2 hi')).toEqual({ peer: 'a1b2', text: 'hi' })
+  expect(parseSend('send api')).toBe(undefined)
+  expect(parseSend('send api   ')).toBe(undefined)
+  expect(parseSend('send')).toBe(undefined)
+  expect(parseSend('peers')).toBe(undefined)
+  expect(parseSend('sending api hi')).toBe(undefined)
+})
+
+test('parseSend cuts a long message to 2000 characters', () => {
+  expect(parseSend(`send api ${'x'.repeat(2500)}`)?.text.length).toBe(2000)
+})
+
+test('findPeer matches an exact name, then a unique prefix, then an id prefix of 4 or more', () => {
+  const list = [peer('a1b2c3', 'idle', '/w/api'), peer('c3d4e5', 'idle', '/w/api'), peer('e5f6a7', 'bash', '/w/web'), peer('f0f0f0', 'idle', '/w/webapp')]
+  expect(findPeer(list, 'WEB').peer?.id).toBe('e5f6a7')
+  expect(findPeer(list, 'weba').peer?.id).toBe('f0f0f0')
+  expect(findPeer(list, 'api').error).toBe('"api" matches several: api #a1b2, api #c3d4')
+  expect(findPeer(list, 'c3d4').peer?.id).toBe('c3d4e5')
+  expect(findPeer(list, 'c3d').error).toBe('no live session matches "c3d"')
+  expect(findPeer(list, 'docs').error).toBe('no live session matches "docs"')
+  expect(findPeer([], 'api').error).toBe('no live session matches "api"')
+})
+
+test('sendReport says whether the message went', () => {
+  expect(sendReport('api', { isDelivered: true })).toBe('sent to api')
+  expect(sendReport('api', { isDelivered: false, reason: 'the session is gone' })).toBe('not sent to api: the session is gone')
 })

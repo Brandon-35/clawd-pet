@@ -20,6 +20,7 @@ export type Stats = {
   freed?: number // tokens those compactions freed, summed
   lastTurnUsd?: number // what the latest main-loop turn cost, when the host keeps a ledger
   untested?: number // main-loop turns that edited code files and ran no check
+  sent?: number // messages `/clawd send` delivered to other sessions
 }
 
 export const newStats = (since: number): Stats => ({ since, turns: 0, workMs: 0, calls: {}, failed: 0, files: [] })
@@ -61,6 +62,9 @@ export const countCompaction = (s: Stats, freed: number): Stats => ({ ...s, comp
 /** `s` after a turn that edited code files and ran no check. */
 export const countUntested = (s: Stats): Stats => ({ ...s, untested: (s.untested ?? 0) + 1 })
 
+/** `s` after one message `/clawd send` delivered. */
+export const countSent = (s: Stats): Stats => ({ ...s, sent: (s.sent ?? 0) + 1 })
+
 /** All the tool calls `s` counted. */
 export const callCount = (s: Stats) => MODE_ORDER.reduce((n, m) => n + (s.calls[m] ?? 0), 0)
 
@@ -87,6 +91,7 @@ export function statsReport(s: Stats, now: number, hud?: Hud, forecast: Forecast
     `- ${plural(s.files.length, 'file')} edited`,
     ...((s.rereads ?? 0) > 0 ? [`- re-reads: ${s.rereads}`] : []),
     ...((s.untested ?? 0) > 0 ? [`- turns with untested edits: ${s.untested}`] : []),
+    ...((s.sent ?? 0) > 0 ? [`- messages sent: ${s.sent}`] : []),
     ...((s.compactions ?? 0) > 0 ? [`- compactions: ${s.compactions}, freed ~${fmtTokens(s.freed ?? 0)} tokens`] : []),
     ...(session ? [`- cost: ${session} this session${last ? `, ${last} last turn` : ''}`] : []),
     ...(gauges.length > 0 ? [`- ${gauges.join(' · ')}`] : []),

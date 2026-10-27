@@ -124,3 +124,43 @@ export function peerEvents(before: Peer[], now: Peer[], at: number, home = ''): 
 
 /** How many of the live peers wait on the user. */
 export const waitingPeers = (list: Peer[]) => list.filter(p => p.mode === 'alert').length
+
+/** The longest message `/clawd send` passes on; the rest is cut. */
+export const SEND_MAX = 2000
+
+/** `/clawd send <peer> <text…>` read from the command's args: the peer's first word and the rest as the text, or undefined. */
+export function parseSend(args: string) {
+  const [, peer, text] = /^send\s+(\S+)\s+([\s\S]*\S)\s*$/.exec(args.trim()) ?? []
+
+  return peer && text ? { peer, text: [...text].slice(0, SEND_MAX).join('') } : undefined
+}
+
+/**
+ * The live peer `query` names, matched without case against the names `namePeers` gives: an exact name first, then
+ * the start of one name, then the start of one id of 4 characters or more, with its name. Otherwise an error that says why.
+ */
+export function findPeer(list: Peer[], query: string, home = ''): { peer?: Peer; name?: string; error?: string } {
+  const q = query.toLowerCase()
+  const names = namePeers(list, home)
+  const all = list.map((p, i) => ({ p, name: names[i] ?? p.id }))
+  const tries = [
+    all.filter(x => x.name.toLowerCase() === q),
+    all.filter(x => x.name.toLowerCase().startsWith(q)),
+    q.length >= 4 ? all.filter(x => x.p.id.toLowerCase().startsWith(q)) : [],
+  ]
+  for (const hits of tries) {
+    const [hit] = hits
+    if (hit && hits.length === 1) {
+      return { peer: hit.p, name: hit.name }
+    }
+    if (hits.length > 1) {
+      return { error: `"${query}" matches several: ${hits.map(x => x.name).join(', ')}` }
+    }
+  }
+
+  return { error: `no live session matches "${query}"` }
+}
+
+/** What `/clawd send` prints after a send to the peer named `name`. */
+export const sendReport = (name: string, result: { isDelivered: boolean; reason?: string }) =>
+  result.isDelivered ? `sent to ${name}` : `not sent to ${name}: ${result.reason ?? 'unknown reason'}`

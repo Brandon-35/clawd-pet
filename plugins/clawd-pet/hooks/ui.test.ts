@@ -293,6 +293,53 @@ test('/clawd peers lists the other live sessions from their records, and /clawd 
   expect((await run('')).text).toContain('- peers: 2 live, 1 needs you')
 })
 
+test('/clawd send messages a live session by name, counts it, and sends nothing to an unknown or ambiguous name', async ($, on) => {
+  const files: Record<string, string> = {
+    'self.tsv': '1\tidle\t\t\t/w/me\t50\t\t\t\t0\t1\t\n',
+    'a1b2.tsv': '1\tidle\t\t\t/w/api\t41\t\t\t\t0\t1\t\n',
+    'c3d4.tsv': '1\tidle\t\t\t/w/web\t72\t\t\t\t0\t1\t\n',
+    'e5f6.tsv': '1\tidle\t\t\t/x/web\t72\t\t\t\t0\t1\t\n',
+  }
+  stubEngine(on, [], () => usage, path => (path.startsWith('/home/u/') ? files[path.split('/').pop() ?? ''] ?? '' : JSON.stringify(BLOCK)))
+  const sent: { to: unknown; text: string }[] = []
+  on('env.get', () => ({ value: '/home/u' }))
+  on('session.id', () => ({ value: 'self' }))
+  on('session.root', () => ({ value: '/w/me' }))
+  on('fs.list', () => ({ value: Object.keys(files).map(name => ({ name, kind: 'file' as const, size: 1, mtimeMs: 0, isLink: false })) }))
+  on('session.send', (_$, e) => {
+    sent.push({ to: e.to, text: e.text })
+    return { isDelivered: true }
+  })
+  await $.session.start({ cwd: '/w/me', surface: 'terminal', isInteractive: true })
+
+  const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect((await run('send api hello there')).text).toBe('sent to api')
+  // The engine spells a plugin's { sessionId } as the bare id by the time a hook sees it.
+  expect(sent).toEqual([{ to: 'a1b2', text: 'hello there' }])
+  expect((await run('send web hi')).text).toBe('"web" matches several: web #c3d4, web #e5f6')
+  expect((await run('send docs hi')).text).toBe('no live session matches "docs"')
+  expect((await run('send api')).text).toBe('usage: /clawd send <session> <message>; /clawd peers lists the sessions')
+  expect(sent.length).toBe(1)
+  expect((await run('')).text).toContain('- messages sent: 1')
+})
+
+test('/clawd send that throws says why and counts nothing', async ($, on) => {
+  stubEngine(on, [], () => usage, path => (path.startsWith('/home/u/') ? '1\tidle\t\t\t/w/api\t41\t\t\t\t0\t1\t\n' : JSON.stringify(BLOCK)))
+  on('env.get', () => ({ value: '/home/u' }))
+  on('session.id', () => ({ value: 'self' }))
+  on('session.root', () => ({ value: '/w/me' }))
+  on('fs.list', () => ({ value: [{ name: 'a1b2.tsv', kind: 'file' as const, size: 1, mtimeMs: 0, isLink: false }] }))
+  // A hook that throws is skipped, so the call fails beneath it, as a closed socket would.
+  on('session.send', () => {
+    throw new Error('the socket closed')
+  })
+  await $.session.start({ cwd: '/w/me', surface: 'terminal', isInteractive: true })
+
+  const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect((await run('send api hi')).text).toMatch(/^not sent to api: no implementation for session\.send/)
+  expect((await run('')).text).not.toContain('messages sent')
+})
+
 test('with the Peer board off, /clawd peers reads no other session', { options: { peers: false } }, async ($, on) => {
   stubEngine(on)
   let listed = false

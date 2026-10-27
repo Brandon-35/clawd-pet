@@ -18,12 +18,12 @@ import { previewPage } from './preview'
 import { newTurnChecks, noteCommand, noteEdit, untestedWarning } from './checks'
 import { forgetAll, forgetPath, noteRead, noteTokens, readKey, rereadWarning } from './reread'
 import type { Reads } from './reread'
-import { PEER_STALE_MS, livePeers, parseRecord, peerEvents, peersLine, peersReport, waitingPeers } from './peers'
+import { PEER_STALE_MS, findPeer, livePeers, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
 import type { Peer } from './peers'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
 import type { ShellState } from './shell'
-import { callCount, countCall, countCompaction, countReread, countTurn, countUntested, newStats, statsReport, streakWarning, turnCost, turnRecap } from './stats'
+import { callCount, countCall, countCompaction, countReread, countSent, countTurn, countUntested, newStats, statsReport, streakWarning, turnCost, turnRecap } from './stats'
 import { compactLine } from './compact'
 import { contextLines } from './context'
 import { addToday, dayOf, readToday, todayLine } from './today'
@@ -281,7 +281,7 @@ export const register: Register = (on, options) => {
     try {
       await $.command.register({
         name: 'clawd',
-        description: "Clawd's report on this session: turns, tool calls, failures, files edited, and what is left. /clawd peers lists your other live sessions",
+        description: "Clawd's report on this session: turns, tool calls, failures, files edited, and what is left. /clawd peers lists your other live sessions; /clawd send <session> <message> messages one",
         immediate: true,
       })
     } catch {
@@ -555,6 +555,32 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'clawd' }, async ($, e) => {
     const t = await $.clock.now()
+    if (/^send(\s|$)/.test(e.args.trim())) {
+      const send = parseSend(e.args)
+      if (!send) {
+        return { text: 'usage: /clawd send <session> <message>; /clawd peers lists the sessions' }
+      }
+      if (!settings.peers) {
+        return { text: 'The Peer board setting is off, so other sessions are not read.' }
+      }
+      const live = home ? await readPeers($, `${home}/${SHELL_DIR}`, t, selfId) : []
+      const { peer, name = '', error = '' } = findPeer(live, send.peer, home)
+      if (!peer) {
+        return { text: error }
+      }
+      // Only an id read from a live record is ever an address: a local session of this user.
+      let result
+      try {
+        result = await $.session.send({ to: { sessionId: peer.id }, text: send.text })
+      } catch (err) {
+        result = { isDelivered: false, reason: err instanceof Error ? err.message : String(err) }
+      }
+      if (result.isDelivered) {
+        stats = countSent(stats)
+      }
+
+      return { text: sendReport(name, result) }
+    }
     const peers = settings.peers && home ? await readPeers($, `${home}/${SHELL_DIR}`, t, selfId) : []
     if (e.args.trim() === 'peers') {
       return { text: settings.peers ? peersReport(peers, t, home) : 'The Peer board setting is off, so other sessions are not read.' }

@@ -47,4 +47,5 @@ A user who updates keeps three things the old version saved. Each must still loa
 
 - All art is original. Do not add sprites, images, or fonts copied from elsewhere.
 - The mod decorates around the chat: the band and the HUD. It does not restyle what Claude Code draws itself, such as tool rows, the spinner, or dialogs.
-- The mod makes no network requests, starts no processes, and reads no environment variables. README's Privacy and security section promises this.
+- The mod makes no network requests and starts no processes. It reads one environment variable, `HOME`, only to write the shell status under `~/.cache/clawd-pet`. README's Privacy and security section promises this.
+- `zsh/clawd-pet.plugin.zsh` runs on every prompt draw: zsh builtins only, no subshell or process. It reads the record format `shell.ts` writes; a change to that format bumps `SHELL_FORMAT` in both.

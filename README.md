@@ -105,6 +105,33 @@ Bars fill in half cells and shrink on a narrow terminal. MP and ST go red under 
 
 Clawd watches the HUD too: while idle or thinking it sweats at 50 % HP, goes dizzy at 25 %, and looks worn out when MP or ST drops under 20 %.
 
+## In your zsh prompt
+
+Each session writes what it is doing to `~/.cache/clawd-pet/sessions/`. The Oh My Zsh plugin in [`zsh/`](zsh/clawd-pet.plugin.zsh) shows it in your prompt, so a shell in another pane or tab knows when Claude is done or needs you:
+
+```text
+~/app  main ✓                           ✻ $ npm test · 1m05s · HP 64%  ✻ 1 waiting
+```
+
+The segment shows the session running in the current directory (or a folder above it): its status line, how long the turn has run, and the context left, in the pet's line color. `✻ 1 waiting` counts the other sessions waiting on you. Reading the files takes zsh builtins only, about 0.2 ms a prompt.
+
+1. Link the plugin into Oh My Zsh, from a clone of this repo:
+
+   ```bash
+   ln -s "$PWD/zsh" "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/clawd-pet"
+   ```
+
+2. Add `clawd-pet` to `plugins=(...)` in `~/.zshrc`.
+3. With powerlevel10k, add `clawd_pet` to `POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS` in `~/.p10k.zsh`. With any other theme, add `RPROMPT='$(clawd_pet_prompt_info)'` to `~/.zshrc`.
+4. Open a new shell.
+
+Two commands come with it:
+
+- `clawd-status` lists every live session: mode, directory, status line, HP, MP.
+- `clawd-wait` waits until the session here stops working, rings the bell, and fails if the turn failed or was stopped: `clawd-wait && git push`.
+
+Set `CLAWD_PET_ICON` or `CLAWD_PET_MAX` (the most status-line characters shown, 28 by default) before the plugin loads to change the look. Turn the files off with the **Shell status** setting.
+
 ## Customize
 
 Ask Claude in any session, or run `/clawd-pet:clawd-pet`. Some things to try:
@@ -134,6 +161,7 @@ Run `/plugin configure clawd-pet@clawd-pet` in a session.
 | Name files and commands | on | Show the file, pattern, command, host, or query each tool works on. |
 | Subagent minis | on | One mini per running subagent behind the pet. |
 | Toasts | on | The recap after a long turn, and the warnings for failing or repeated calls, low context, and low or fast-falling rate limits. |
+| Shell status | on | Write each session's state to `~/.cache/clawd-pet/sessions/` for the zsh prompt. |
 | Notify after (seconds) | `120` | A turn at least this long ends with a desktop notification. `0` turns it off; under `30` counts as `30`. |
 
 Or from a shell, then restart Claude Code:
@@ -142,7 +170,7 @@ Or from a shell, then restart Claude Code:
 echo '{"speed": "fast", "sleepAfter": "300"}' | claude plugin configure clawd-pet@clawd-pet --values-stdin
 ```
 
-The install may say "8 userConfig options not yet set". Every setting has a default, so nothing is needed.
+The install may say "9 userConfig options not yet set". Every setting has a default, so nothing is needed.
 
 ## Update
 
@@ -166,7 +194,10 @@ A mod runs inside Claude Code with your permissions. clawd-pet:
 - keeps the day's totals (sessions, turns, time worked, tool calls) in its own store, as numbers only;
 - sends a desktop notification through Claude Code when a long turn ends, if **Notify after** is not `0`;
 - registers three tools for themes: `get_theme` returns the current theme, `preview_theme` writes a preview page to the path Claude gives it, and `set_theme` stores a theme in the mod's own store;
-- makes no network requests, starts no processes, and reads no environment variables.
+- writes one small file per session to `~/.cache/clawd-pet/sessions/` for the zsh prompt, unless **Shell status** is off: the mode, line color, status line, session folder, HP, MP, ST, and timestamps;
+- makes no network requests and starts no processes, and reads one environment variable, `HOME`, to find that folder.
+
+The zsh plugin reads those files with zsh builtins and deletes ones a dead session left for a day; it starts no process either.
 
 Its tool hook sees each tool's input but keeps only a short target for the status line: for `Bash`, the command's first line cut to 24 characters. For `/clawd` it also keeps the paths of edited files, in memory only, to count each file once; the report prints the count, never the paths. To spot repeated calls it keeps, in memory and only until the next edit, each call's command, path, pattern, URL, or query. The turn hooks read only when a turn starts and ends, how long it took, and why it ended. The notification hook only notes that a notification arrived and whether a plugin sent it; it never reads the text.
 

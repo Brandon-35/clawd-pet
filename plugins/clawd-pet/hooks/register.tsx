@@ -14,7 +14,8 @@ import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
 import { previewPage } from './preview'
 import { readSettings } from './settings'
-import { countCall, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
+import { callCount, countCall, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
+import { addToday, dayOf, readToday, todayLine } from './today'
 import { BODY_W, FACES, HEIGHT, MAX_MINIS, compose, crop, encodeCells, encodeSvg, trailWidth } from './pixels'
 import type { Body } from './pixels'
 import { GROUND_H, drawBand, layScene, obstacleSpans } from './scene'
@@ -32,6 +33,7 @@ const PACE_MIN_MS = { mp: 15 * 60000, st: 2 * 3600000 }
 const SLOW_BEATS: Partial<Record<Mode, number>> = { idle: 2, sleep: 4 } // ticks per redraw while nothing moves fast
 
 const THEME_KEY = 'theme' // in $.store: the theme set_theme last took
+const TODAY_KEY = 'today' // in $.store: the day's work across sessions
 const OWN_TOOLS = 'mcp__clawd-pet__'
 // Literals, so `claude plugin validate` can read the hooks' matchers.
 const SET_THEME = 'mcp__clawd-pet__set_theme'
@@ -72,6 +74,15 @@ function themeReport(pet: Body, notes: string[]) {
   const noted = notes.length > 0 ? `\n\nNotes, to act on or leave as drawn:\n- ${notes.join('\n- ')}` : ''
 
   return `The mod made every clip and face from the sprite: ${made}.\n\nResting frame (@ is an eye, * a cheek):\n${restingFrame(pet)}${noted}`
+}
+
+/** Counts `add` into the day's work kept across sessions. Losing a count is better than failing the hook. */
+async function countToday($: EngineInterface, now: number, add: Parameters<typeof addToday>[2]) {
+  try {
+    await $.store.set(TODAY_KEY, addToday(await $.store.get(TODAY_KEY), now, add))
+  } catch {
+    // The report shows what was kept.
+  }
 }
 
 /** The default Clawd theme, from the plugin's own file. */
@@ -143,6 +154,7 @@ export const register: Register = (on, options) => {
     await update($, anim, () => ({ mode: 'idle', since: now, x: 0, dir: 1, tick: 0, target: '', working: false }))
     hud = await usageOr($, now, undefined)
     stats = newStats(now)
+    await countToday($, now, { sessions: 1 })
     try {
       await $.tool.register({
         name: 'preview_theme',
@@ -288,6 +300,7 @@ export const register: Register = (on, options) => {
       alert = false
       turnStartedAt = undefined
       stats = countTurn(stats, e.durationMs)
+      await countToday($, await $.clock.now(), { turns: 1, workMs: e.durationMs, calls: callCount(stats) - callCount(turnStats) })
       // A fresh reading, kept apart from `hud` so the tick still sees the fall and warns.
       const fresh = await usageOr($, await $.clock.now(), undefined)
       if (fresh) {
@@ -339,7 +352,9 @@ export const register: Register = (on, options) => {
       stOutMin: stepLimit(stPace, hud?.st, hud?.stResetsInMin, t, PACE_MIN_MS.st).outMin,
     }
 
-    return { text: statsReport(stats, t, hud, forecast) }
+    const today = readToday(await $.store.get(TODAY_KEY).catch(() => undefined), dayOf(t))
+
+    return { text: `${statsReport(stats, t, hud, forecast)}\n${todayLine(today)}` }
   })
 
   on('tool.call', { tool: PREVIEW_THEME }, async ($, e) => {

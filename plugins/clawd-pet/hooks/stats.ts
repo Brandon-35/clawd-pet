@@ -35,11 +35,14 @@ export function countCall(s: Stats, mode: ToolMode, file: string, failed: boolea
 /** `s` after a main-loop turn that took `durationMs`. */
 export const countTurn = (s: Stats, durationMs: number): Stats => ({ ...s, turns: s.turns + 1, workMs: s.workMs + Math.max(0, durationMs) })
 
+/** All the tool calls `s` counted. */
+export const callCount = (s: Stats) => MODE_ORDER.reduce((n, m) => n + (s.calls[m] ?? 0), 0)
+
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 /** What `/clawd` prints: the session's turns, tool calls by kind, failures, files edited, and the HUD's readings. */
 export function statsReport(s: Stats, now: number, hud?: Hud, forecast: Forecast = {}) {
-  const calls = MODE_ORDER.reduce((n, m) => n + (s.calls[m] ?? 0), 0)
+  const calls = callCount(s)
   const kinds = MODE_ORDER.filter(m => s.calls[m]).map(m => `${s.calls[m]} ${m}`)
   const share = calls > 0 ? ` (${Math.round((s.failed / calls) * 100)}%)` : ''
   const limit = (label: string, left?: number, resetsInMin?: number, outMin?: number) =>
@@ -68,8 +71,7 @@ export function turnRecap(start: Stats, end: Stats, durationMs: number, reason: 
   if (durationMs < RECAP_AFTER_MS || reason === 'aborted') {
     return undefined
   }
-  const total = (s: Stats) => MODE_ORDER.reduce((n, m) => n + (s.calls[m] ?? 0), 0)
-  const calls = total(end) - total(start)
+  const calls = callCount(end) - callCount(start)
   const files = end.files.length - start.files.length
   const failed = end.failed - start.failed
   const parts = [

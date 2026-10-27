@@ -30,6 +30,10 @@ test('the report lists turns, calls by kind, failures, files, and the HUD readin
   )
 })
 
+test('the report says how many turns the context holds at the recent pace', () => {
+  expect(statsReport(newStats(0), 0, { hp: 40 }, 5).split('\n').pop()).toBe('- context 40% left (about 5 turns at this pace)')
+})
+
 test('a fresh session reports zeros without a share', () => {
   expect(statsReport(newStats(0), 0)).toBe(['report on this session, 0s in:', '- 0 turns, 0s of work', '- 0 tool calls', '- 0 failed', '- 0 files edited'].join('\n'))
 })

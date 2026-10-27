@@ -105,4 +105,6 @@ test('a gauge warns once as it falls to a mark, and again only after it climbs b
   expect(gaugeWarnings({ hp: 60, st: 11 }, { hp: 60, st: 10 })).toEqual(['7-day limit 10% left'])
   expect(gaugeWarnings(undefined, { hp: 90, mp: 6 })).toEqual(['5-hour limit 6% left'])
   expect(gaugeWarnings(undefined, { hp: 90 })).toEqual([])
+  expect(gaugeWarnings({ hp: 25 }, { hp: 18 }, 3)).toEqual(['context 18% left (about 3 turns at this pace): run /compact at a good stopping point'])
+  expect(gaugeWarnings({ hp: 25 }, { hp: 18 }, 1)[0]).toContain('(about 1 turn at this pace)')
 })

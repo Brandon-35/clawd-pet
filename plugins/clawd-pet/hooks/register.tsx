@@ -8,6 +8,7 @@ import type { Hud } from './hud'
 import { callKey, loopWarning, repeat } from './loops'
 import type { Repeats } from './loops'
 import { minisOnScreen, reconcile } from './minis'
+import { noteTurn, turnsLeft } from './pace'
 import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
 import { previewPage } from './preview'
@@ -113,6 +114,7 @@ export const register: Register = (on, options) => {
   let stats = newStats(0)
   let turnStats = stats // the counts when the main loop's turn began
   let repeats: Repeats = {}
+  let hps: number[] = [] // the context left at the end of recent turns
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
   let layoutOf: Body | undefined
@@ -185,7 +187,7 @@ export const register: Register = (on, options) => {
         const before = hud
         hud = await usageOr($, t, hud)
         if (settings.toasts && hud && hud !== before) {
-          for (const warning of gaugeWarnings(before, hud)) {
+          for (const warning of gaugeWarnings(before, hud, turnsLeft(hps))) {
             $.ui.toast(warning, { timeoutMs: 10000 })
           }
         }
@@ -269,6 +271,11 @@ export const register: Register = (on, options) => {
       alert = false
       turnStartedAt = undefined
       stats = countTurn(stats, e.durationMs)
+      // A fresh reading, kept apart from `hud` so the tick still sees the fall and warns.
+      const fresh = await usageOr($, await $.clock.now(), undefined)
+      if (fresh) {
+        hps = noteTurn(hps, fresh.hp)
+      }
       const recap = settings.toasts ? turnRecap(turnStats, stats, e.durationMs, e.reason) : undefined
       if (recap) {
         $.ui.toast(recap, { timeoutMs: 8000 })
@@ -306,7 +313,7 @@ export const register: Register = (on, options) => {
     }
   })
 
-  on('command.run', { command: 'clawd' }, async $ => ({ text: statsReport(stats, await $.clock.now(), hud) }))
+  on('command.run', { command: 'clawd' }, async $ => ({ text: statsReport(stats, await $.clock.now(), hud, turnsLeft(hps)) }))
 
   on('tool.call', { tool: PREVIEW_THEME }, async ($, e) => {
     const { theme, path } = e as unknown as { theme?: unknown; path?: unknown }

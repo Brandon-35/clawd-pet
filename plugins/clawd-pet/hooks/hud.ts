@@ -190,6 +190,9 @@ export const barWidth = (columns: number) => clamp(BAR_W - Math.max(0, HUD_WINDO
 const HP_WARN = [20, 10]
 const LIMIT_WARN = [10]
 
+/** How many turns the context holds at the recent pace, as the HUD's warnings and `/clawd` say it; '' with no forecast. */
+export const aboutTurns = (turns?: number) => (turns === undefined ? '' : ` (about ${turns} turn${turns === 1 ? '' : 's'} at this pace)`)
+
 /** Whether `now` has fallen to a mark `before` was above. No reading before counts as full. */
 const crossed = (marks: number[], before: number | undefined, now: number | undefined) =>
   now !== undefined && marks.some(m => now <= m && (before ?? 100) > m)
@@ -198,12 +201,12 @@ const crossed = (marks: number[], before: number | undefined, now: number | unde
  * The warnings for the gauges that fell to a mark between two HUD readings, one per gauge: context at 20 % and 10 %,
  * each rate limit at 10 %. A gauge that climbs back above a mark warns again the next time it falls.
  */
-export function gaugeWarnings(before: Hud | undefined, now: Hud) {
+export function gaugeWarnings(before: Hud | undefined, now: Hud, turnsLeft?: number) {
   const limit = (label: string, left: number | undefined, resetsInMin: number | undefined) =>
     `${label} ${left}% left${resetsInMin === undefined ? '' : `, resets in ${fmtMin(resetsInMin)}`}`
 
   return [
-    ...(crossed(HP_WARN, before?.hp, now.hp) ? [`context ${now.hp}% left: run /compact at a good stopping point`] : []),
+    ...(crossed(HP_WARN, before?.hp, now.hp) ? [`context ${now.hp}% left${aboutTurns(turnsLeft)}: run /compact at a good stopping point`] : []),
     ...(crossed(LIMIT_WARN, before?.mp, now.mp) ? [limit('5-hour limit', now.mp, now.mpResetsInMin)] : []),
     ...(crossed(LIMIT_WARN, before?.st, now.st) ? [limit('7-day limit', now.st, now.stResetsInMin)] : []),
   ]

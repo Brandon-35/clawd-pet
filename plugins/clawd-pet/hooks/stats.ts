@@ -1,4 +1,4 @@
-import { fmtMin } from './hud'
+import { aboutTurns, fmtMin } from './hud'
 import type { Hud } from './hud'
 import { fmtDuration } from './status'
 import type { ToolMode } from './status'
@@ -38,13 +38,13 @@ export const countTurn = (s: Stats, durationMs: number): Stats => ({ ...s, turns
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 /** What `/clawd` prints: the session's turns, tool calls by kind, failures, files edited, and the HUD's readings. */
-export function statsReport(s: Stats, now: number, hud?: Hud) {
+export function statsReport(s: Stats, now: number, hud?: Hud, turnsLeft?: number) {
   const calls = MODE_ORDER.reduce((n, m) => n + (s.calls[m] ?? 0), 0)
   const kinds = MODE_ORDER.filter(m => s.calls[m]).map(m => `${s.calls[m]} ${m}`)
   const share = calls > 0 ? ` (${Math.round((s.failed / calls) * 100)}%)` : ''
   const limit = (label: string, left?: number, resetsInMin?: number) =>
     left === undefined ? [] : [`${label} ${left}% left${resetsInMin === undefined ? '' : `, resets in ${fmtMin(resetsInMin)}`}`]
-  const gauges = hud ? [`context ${hud.hp}% left`, ...limit('5-hour limit', hud.mp, hud.mpResetsInMin), ...limit('7-day limit', hud.st, hud.stResetsInMin)] : []
+  const gauges = hud ? [`context ${hud.hp}% left${aboutTurns(turnsLeft)}`, ...limit('5-hour limit', hud.mp, hud.mpResetsInMin), ...limit('7-day limit', hud.st, hud.stResetsInMin)] : []
 
   return [
     `report on this session, ${fmtDuration(now - s.since)} in:`,

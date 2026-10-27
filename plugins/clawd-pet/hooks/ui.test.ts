@@ -243,3 +243,32 @@ test('a long turn toasts what it cost, the report names it, and the day adds it 
   expect(toasts.at(-1)).toBe('done in 45s · $0.48')
   expect((store.get('today') as { usd: number }).usd).toBeGreaterThan(0.89)
 })
+
+test('a turn that edits code files and runs no check toasts at its end; a check or an abort keeps it quiet', async ($, on) => {
+  const toasts: string[] = []
+  stubEngine(on, toasts)
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  const untested = () => toasts.filter(t => t.includes('ran no tests or checks'))
+  const turn = async (id: string, bash: string | undefined, reason: 'answer' | 'aborted' = 'answer') => {
+    await $.turn.start({ text: 'go', turnId: id })
+    await $.tool.call({ tool: 'Edit', file_path: '/repo/src/a.ts', old_string: 'a', new_string: 'b' })
+    await $.tool.call({ tool: 'Write', file_path: '/repo/src/b.ts', content: 'x', agentId: 'sub1' })
+    if (bash !== undefined) {
+      await $.tool.call({ tool: 'Bash', command: bash, agentId: 'sub1' })
+    }
+    await $.turn.complete({ answer: '', durationMs: 5_000, isAborted: reason === 'aborted', turnId: id, reason })
+  }
+
+  await turn('t1', undefined)
+  expect(untested()).toEqual(['edited 2 code files this turn and ran no tests or checks'])
+  await turn('t2', 'npm test')
+  await turn('t3', undefined, 'aborted')
+  await turn('t4', 'git status')
+  expect(untested().length).toBe(2)
+
+  const report = await $.command.run({ command: 'clawd', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(report.text).toContain('- turns with untested edits: 2')
+})

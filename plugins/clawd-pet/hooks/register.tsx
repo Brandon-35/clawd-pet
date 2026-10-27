@@ -15,12 +15,13 @@ import type { LimitPace } from './pace'
 import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
 import { previewPage } from './preview'
+import { newTurnChecks, noteCommand, noteEdit, untestedWarning } from './checks'
 import { forgetAll, forgetPath, noteRead, noteTokens, readKey, rereadWarning } from './reread'
 import type { Reads } from './reread'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
 import type { ShellState } from './shell'
-import { callCount, countCall, countCompaction, countReread, countTurn, newStats, statsReport, streakWarning, turnCost, turnRecap } from './stats'
+import { callCount, countCall, countCompaction, countReread, countTurn, countUntested, newStats, statsReport, streakWarning, turnCost, turnRecap } from './stats'
 import { compactLine } from './compact'
 import { contextLines } from './context'
 import { addToday, dayOf, readToday, todayLine } from './today'
@@ -170,6 +171,7 @@ export const register: Register = (on, options) => {
   let hps: number[] = [] // the context left at the end of recent turns
   let heaviest: Heavy[] = [] // the session's heaviest tool results, for the report
   let reads: Reads = {} // what the main loop read and the context still holds
+  let checks = newTurnChecks() // the main loop's turn: code files edited and whether a check ran, subagents included
   let lastReadKey = '' // the main loop's latest Read, to size its result
   const lastTargets = new Map<string, string>() // the target of each tool's latest call, to name its result
   let shellPath: string | undefined // this session's record for the zsh plugin, once its home and id are known
@@ -353,6 +355,13 @@ export const register: Register = (on, options) => {
     const edited = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : ''
     if (EDIT_TOOLS.includes(e.tool) && edited !== '') {
       reads = forgetPath(reads, edited)
+      if (!failed) {
+        checks = noteEdit(checks, edited)
+      }
+    }
+    // A check that ran and failed still counts: it was run.
+    if (e.tool === 'Bash' && typeof input.command === 'string' && !('deny' in result)) {
+      checks = noteCommand(checks, input.command)
     }
     const again = repeat(repeats, mode, errored ? undefined : callKey(e.tool, input))
     repeats = again.repeats
@@ -406,6 +415,7 @@ export const register: Register = (on, options) => {
       turnStats = stats
       turnStartUsd = gauges.hud?.costUsd
       repeats = {}
+      checks = newTurnChecks()
     }
     return next(e)
   })
@@ -429,6 +439,13 @@ export const register: Register = (on, options) => {
       const recap = settings.toasts ? turnRecap(turnStats, stats, e.durationMs, e.reason, usd) : undefined
       if (recap) {
         $.ui.toast(recap, { timeoutMs: 8000 })
+      }
+      const untested = e.reason === 'aborted' ? undefined : untestedWarning(checks)
+      if (untested) {
+        stats = countUntested(stats)
+        if (settings.toasts) {
+          $.ui.toast(untested, { timeoutMs: 10000 })
+        }
       }
       if (settings.notifyAfterMs > 0 && e.durationMs >= settings.notifyAfterMs && e.reason !== 'aborted') {
         // The recap is never empty past 30 s, and a notification that cannot be sent is not worth a fault.

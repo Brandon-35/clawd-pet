@@ -66,6 +66,14 @@
       "title": "Toasts",
       "description": "A recap when a long turn ends, and a warning when context, a rate limit, or a run of tool calls goes wrong.",
       "default": true
+    },
+    "notifyAfter": {
+      "type": "number",
+      "title": "Notify after (seconds)",
+      "description": "A turn at least this long ends with a desktop notification, for when you have looked away. 0 turns it off.",
+      "default": 120,
+      "min": 0,
+      "max": 3600
     }
   }
 }

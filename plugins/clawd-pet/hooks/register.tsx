@@ -261,6 +261,10 @@ export const register: Register = (on, options) => {
       if (recap) {
         $.ui.toast(recap, { timeoutMs: 8000 })
       }
+      if (settings.notifyAfterMs > 0 && e.durationMs >= settings.notifyAfterMs && e.reason !== 'aborted') {
+        // The recap is never empty past 30 s, and a notification that cannot be sent is not worth a fault.
+        $.ui.notify(turnRecap(turnStats, stats, e.durationMs, e.reason) ?? 'the turn ended', { title: 'Claude Code' }).catch(() => undefined)
+      }
       const t = await $.clock.now()
       await update($, anim, a => ended(a, e.reason, t))
     }

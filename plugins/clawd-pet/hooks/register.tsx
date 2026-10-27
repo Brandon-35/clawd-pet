@@ -18,7 +18,9 @@ import { previewPage } from './preview'
 import { newTurnChecks, noteCommand, noteEdit, untestedWarning } from './checks'
 import { forgetAll, forgetPath, noteRead, noteTokens, readKey, rereadWarning } from './reread'
 import type { Reads } from './reread'
-import { PEER_STALE_MS, findPeer, livePeers, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
+import { NOTE_MAX, NOTE_PREFIX, isNote, keepNotes, messageToast, noteText, noteToast, notesLine, unwrap } from './inbox'
+import type { Note } from './inbox'
+import { PEER_STALE_MS, findPeer, livePeers, parsePeerCommand, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
 import type { Peer } from './peers'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
@@ -207,6 +209,7 @@ export const register: Register = (on, options) => {
   let selfId = ''
   let lastPeers: Peer[] | undefined // the other live sessions at the last read; undefined until the first read seeds it
   let readingPeers = false
+  let notes: Note[] = [] // the latest notes other sessions sent, in memory only, for the report
   let shellLast = { key: '', at: 0 }
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
@@ -281,7 +284,7 @@ export const register: Register = (on, options) => {
     try {
       await $.command.register({
         name: 'clawd',
-        description: "Clawd's report on this session: turns, tool calls, failures, files edited, and what is left. /clawd peers lists your other live sessions; /clawd send <session> <message> messages one",
+        description: "Clawd's report on this session: turns, tool calls, failures, files edited, and what is left. /clawd peers lists your other live sessions; /clawd send <session> <message> messages one; /clawd note <session> <note> shows a note to the person there, never its model",
         immediate: true,
       })
     } catch {
@@ -553,8 +556,57 @@ export const register: Register = (on, options) => {
     }
   })
 
+  on('session.receive', async ($, e, next) => {
+    if (e.agentId !== undefined || (e.origin.kind !== 'peer' && e.origin.kind !== 'coordinator')) {
+      return next(e)
+    }
+    const { from, body } = unwrap(e.text)
+    if (isNote(e.origin, body)) {
+      // Taken whatever the settings say: the sender read protocol 1 in this session's record and trusts it to.
+      const note = noteText(body)
+      try {
+        notes = keepNotes(notes, { ...(from !== undefined && { from }), text: note, at: await $.clock.now() })
+        if (settings.toasts) {
+          $.ui.toast(noteToast(from, note), { timeoutMs: 15000 })
+        }
+      } catch {
+        // Nothing here may stop the take: a hook that throws is skipped, and the note would reach the model.
+      }
+      return { consumed: 'clawd-pet note' }
+    }
+    if (settings.toasts) {
+      $.ui.toast(messageToast(from, body), { timeoutMs: 8000 })
+    }
+    return next(e)
+  })
+
   on('command.run', { command: 'clawd' }, async ($, e) => {
     const t = await $.clock.now()
+    if (/^note(\s|$)/.test(e.args.trim())) {
+      const note = parsePeerCommand(e.args, 'note', NOTE_MAX)
+      if (!note) {
+        return { text: 'usage: /clawd note <session> <note>; /clawd peers lists the sessions' }
+      }
+      if (!settings.peers) {
+        return { text: 'The Peer board setting is off, so other sessions are not read.' }
+      }
+      const live = home ? await readPeers($, `${home}/${SHELL_DIR}`, t, selfId) : []
+      const { peer, name = '', error = '' } = findPeer(live, note.peer, home)
+      if (!peer) {
+        return { text: error }
+      }
+      if ((peer.protocol ?? 0) < 1) {
+        return { text: `${name} runs an older clawd-pet that would hand the note to its model; use /clawd send instead` }
+      }
+      let result
+      try {
+        result = await $.session.send({ to: { sessionId: peer.id }, text: NOTE_PREFIX + note.text })
+      } catch (err) {
+        result = { isDelivered: false, reason: err instanceof Error ? err.message : String(err) }
+      }
+
+      return { text: `note ${sendReport(name, result)}` }
+    }
     if (/^send(\s|$)/.test(e.args.trim())) {
       const send = parseSend(e.args)
       if (!send) {
@@ -604,7 +656,7 @@ export const register: Register = (on, options) => {
     }
 
     return {
-      text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today), peersLine(peers), ...contextLines(breakdown)]
+      text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today), peersLine(peers), ...contextLines(breakdown), notesLine(notes, t)]
         .filter(s => s !== '')
         .join('\n'),
     }

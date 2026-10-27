@@ -340,6 +340,71 @@ test('/clawd send that throws says why and counts nothing', async ($, on) => {
   expect((await run('')).text).not.toContain('messages sent')
 })
 
+test('a clawd-pet note from another session is taken before the model, toasts, and lands in the report', async ($, on) => {
+  const toasts: string[] = []
+  stubEngine(on, toasts)
+  const received: string[] = []
+  on('session.receive', (_$, e) => {
+    received.push(e.text)
+    return { text: e.text }
+  })
+  await $.session.start({ cwd: '/w/me', surface: 'terminal', isInteractive: true })
+
+  const text = '<cross-session-message from="uds:/tmp/s.sock" from-name="api" from-mode="bypass">\u0001clawd-pet note: lunch at 12\u0001</cross-session-message>'
+  expect(await $.session.receive({ origin: { kind: 'peer', plugin: 'clawd-pet' }, text })).toEqual({ consumed: 'clawd-pet note' })
+  expect(received).toEqual([])
+  expect(toasts).toEqual(['✎ note from api: lunch at 12'])
+  const report = await $.command.run({ command: 'clawd', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(report.text).toContain('- notes: "lunch at 12" (api, 0s ago)')
+})
+
+test('a message from another mod or model toasts and reaches the model unchanged; other deliveries pass silently', async ($, on) => {
+  const toasts: string[] = []
+  stubEngine(on, toasts)
+  const received: string[] = []
+  on('session.receive', (_$, e) => {
+    received.push(e.text)
+    return { text: e.text }
+  })
+  await $.session.start({ cwd: '/w/me', surface: 'terminal', isInteractive: true })
+
+  const other = '<cross-session-message from-name="web">\u0001clawd-pet note: rebase now\u0001</cross-session-message>'
+  const model = '<cross-session-message from-name="api">the migration is merged</cross-session-message>'
+  expect(await $.session.receive({ origin: { kind: 'peer', plugin: 'other-mod' }, text: other })).toEqual({ text: other })
+  expect(await $.session.receive({ origin: { kind: 'peer' }, text: model })).toEqual({ text: model })
+  await $.session.receive({ origin: { kind: 'bridge' }, text: 'from the phone' })
+  await $.session.receive({ origin: { kind: 'peer', plugin: 'clawd-pet' }, text: 'clawd-pet note: for a worker', agentId: 'a1' })
+  expect(received).toEqual([other, model, 'from the phone', 'clawd-pet note: for a worker'])
+  expect(toasts).toEqual(['✉ web: clawd-pet note: rebase now', '✉ api: the migration is merged'])
+})
+
+test('/clawd note sends the prefixed note to a session that reads notes, and nothing to an older one', async ($, on) => {
+  const files: Record<string, string> = {
+    'self.tsv': '1\tidle\t\t\t/w/me\t50\t\t\t\t0\t1\t\n',
+    'a1b2.tsv': '1\tidle\t\t\t/w/api\t41\t\t\t\t0\t1\t\n',
+    'c3d4.tsv': '1\tidle\t\t\t/w/old\t72\t\t\t\t0\t\n',
+  }
+  stubEngine(on, [], () => usage, path => (path.startsWith('/home/u/') ? files[path.split('/').pop() ?? ''] ?? '' : JSON.stringify(BLOCK)))
+  const sent: { to: unknown; text: string }[] = []
+  on('env.get', () => ({ value: '/home/u' }))
+  on('session.id', () => ({ value: 'self' }))
+  on('session.root', () => ({ value: '/w/me' }))
+  on('fs.list', () => ({ value: Object.keys(files).map(name => ({ name, kind: 'file' as const, size: 1, mtimeMs: 0, isLink: false })) }))
+  on('session.send', (_$, e) => {
+    sent.push({ to: e.to, text: e.text })
+    return { isDelivered: true }
+  })
+  await $.session.start({ cwd: '/w/me', surface: 'terminal', isInteractive: true })
+
+  const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect((await run('note api lunch at 12')).text).toBe('note sent to api')
+  expect(sent).toEqual([{ to: 'a1b2', text: 'clawd-pet note: lunch at 12' }])
+  expect((await run('note old hi')).text).toBe('old runs an older clawd-pet that would hand the note to its model; use /clawd send instead')
+  expect((await run('note api')).text).toBe('usage: /clawd note <session> <note>; /clawd peers lists the sessions')
+  expect(sent.length).toBe(1)
+  expect((await run('')).text).not.toContain('messages sent')
+})
+
 test('with the Peer board off, /clawd peers reads no other session', { options: { peers: false } }, async ($, on) => {
   stubEngine(on)
   let listed = false

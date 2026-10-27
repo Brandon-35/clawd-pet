@@ -104,6 +104,10 @@ sent to api
 
 Name the session as `/clawd peers` does, the start of that name, or the first 4 characters of its id when two share a folder. It needs **Peer board** on. The other session's model reads the message, so it costs that session a turn, not this one.
 
+Run `/clawd note <session> <note>` to leave a note for the person at that session instead. Their clawd-pet takes it before the model sees it: it shows as a toast (`✎ note from web: lunch at 12`) and in their `/clawd`, and costs no tokens on either side. It goes only to a session whose clawd-pet reads notes; an older one gets a refusal here, so the note never reaches its model.
+
+A message another session sends here, which this model will read, toasts with its sender (`✉ api: the migration is merged`) when **Toasts** is on.
+
 ## The HUD
 
 A rounded window under the prompt, titled with the pet's name:
@@ -180,7 +184,7 @@ Run `/plugin configure clawd-pet@clawd-pet` in a session.
 | Status line | on | The text beside the pet. |
 | Name files and commands | on | Show the file, pattern, command, host, or query each tool works on. |
 | Subagent minis | on | One mini per running subagent behind the pet. |
-| Toasts | on | The recap after a long turn, and the warnings for failing or repeated calls, low context, and low or fast-falling rate limits. |
+| Toasts | on | The recap after a long turn, the warnings for failing or repeated calls, low context, and low or fast-falling rate limits, and the messages and notes other sessions send. |
 | Shell status | on | Write each session's state to `~/.cache/clawd-pet/sessions/` for the zsh prompt. |
 | Peer board | on | `/clawd peers` lists your other live sessions on this machine, read from those files; a toast says when one finishes a long turn or waits on you, and the HUD counts the waiting. |
 | Notify after (seconds) | `120` | A turn at least this long ends with a desktop notification. `0` turns it off; under `30` counts as `30`. |
@@ -217,7 +221,8 @@ A mod runs inside Claude Code with your permissions. clawd-pet:
 - registers three tools for themes: `get_theme` returns the current theme, `preview_theme` writes a preview page to the path Claude gives it, and `set_theme` stores a theme in the mod's own store;
 - writes one small file per session to `~/.cache/clawd-pet/sessions/` for the zsh prompt, unless **Shell status** is off: the mode, line color, status line, session folder, HP, MP, ST, and timestamps;
 - reads the other sessions' files in that folder for `/clawd peers`, its toasts and the HUD's waiting count, unless **Peer board** is off: it shows them and never acts on their text;
-- sends `/clawd send` messages only to your own live sessions on this machine found in those files, over Claude Code's local channel, with no network;
+- sends `/clawd send` messages only to your own live sessions on this machine found in those files, over Claude Code's local channel, with no network, and `/clawd note` notes the same way;
+- keeps the last 3 notes other sessions sent in memory only, never on disk, and shows them as text without acting on them;
 - makes no network requests and starts no processes, and reads one environment variable, `HOME`, to find that folder.
 
 The zsh plugin reads those files with zsh builtins and deletes ones a dead session left for a day; it starts no process either.

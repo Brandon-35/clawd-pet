@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { findPeer, livePeers, namePeers, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
+import { findPeer, livePeers, namePeers, parsePeerCommand, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
 import type { Peer } from './peers'
 import { shellRecord } from './shell'
 
@@ -100,6 +100,12 @@ test('parseSend reads the peer and the message, and refuses a send with no messa
 
 test('parseSend cuts a long message to 2000 characters', () => {
   expect(parseSend(`send api ${'x'.repeat(2500)}`)?.text.length).toBe(2000)
+})
+
+test('parsePeerCommand reads any verb with its own cap, and refuses another verb', () => {
+  expect(parsePeerCommand('note api  lunch at 12 ', 'note', 5)).toEqual({ peer: 'api', text: 'lunch' })
+  expect(parsePeerCommand('send api hi', 'note')).toBe(undefined)
+  expect(parsePeerCommand('note api', 'note')).toBe(undefined)
 })
 
 test('findPeer matches an exact name, then a unique prefix, then an id prefix of 4 or more', () => {

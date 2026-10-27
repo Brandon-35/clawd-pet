@@ -18,7 +18,7 @@ export type Peer = {
 }
 
 /** Control characters out, whitespace collapsed, cut to `max` characters. */
-const clean = (s: string, max: number) => [...s.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, max).join('')
+export const clean = (s: string, max: number) => [...s.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, max).join('')
 
 const num = (s: string | undefined) => {
   const n = s === undefined || s === '' ? NaN : Number(s)
@@ -128,12 +128,15 @@ export const waitingPeers = (list: Peer[]) => list.filter(p => p.mode === 'alert
 /** The longest message `/clawd send` passes on; the rest is cut. */
 export const SEND_MAX = 2000
 
-/** `/clawd send <peer> <text…>` read from the command's args: the peer's first word and the rest as the text, or undefined. */
-export function parseSend(args: string) {
-  const [, peer, text] = /^send\s+(\S+)\s+([\s\S]*\S)\s*$/.exec(args.trim()) ?? []
+/** `/clawd <verb> <peer> <text…>` read from the command's args: the peer's first word and the rest as the text, cut to `max`, or undefined. */
+export function parsePeerCommand(args: string, verb: string, max = SEND_MAX) {
+  const [, word, peer, text] = /^(\S+)\s+(\S+)\s+([\s\S]*\S)\s*$/.exec(args.trim()) ?? []
 
-  return peer && text ? { peer, text: [...text].slice(0, SEND_MAX).join('') } : undefined
+  return word === verb && peer && text ? { peer, text: [...text].slice(0, max).join('') } : undefined
 }
+
+/** `/clawd send <peer> <text…>` read from the command's args, or undefined. */
+export const parseSend = (args: string) => parsePeerCommand(args, 'send')
 
 /**
  * The live peer `query` names, matched without case against the names `namePeers` gives: an exact name first, then

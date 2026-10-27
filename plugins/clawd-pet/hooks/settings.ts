@@ -10,11 +10,12 @@ export type Settings = {
   toasts: boolean // the turn recaps and warnings
   notifyAfterMs: number // a turn this long ends with a native notification; 0 never
   shellStatus: boolean // write the session's state for the zsh prompt
+  peers: boolean // read the other sessions' state for `/clawd peers`
 }
 
 const PACE: Record<string, number> = { slow: 0.6, normal: 1, fast: 1.6 }
 
-export const DEFAULTS: Settings = { pace: 1, sleepAfterMs: 60000, hud: true, hudStyle: 'window', statusLine: true, targets: true, minis: true, toasts: true, notifyAfterMs: 120000, shellStatus: true }
+export const DEFAULTS: Settings = { pace: 1, sleepAfterMs: 60000, hud: true, hudStyle: 'window', statusLine: true, targets: true, minis: true, toasts: true, notifyAfterMs: 120000, shellStatus: true, peers: true }
 
 const flag = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback)
 
@@ -36,6 +37,7 @@ export function readSettings(options: Readonly<Record<string, unknown>>): Settin
     minis: flag(options.minis, DEFAULTS.minis),
     toasts: flag(options.toasts, DEFAULTS.toasts),
     shellStatus: flag(options.shellStatus, DEFAULTS.shellStatus),
+    peers: flag(options.peers, DEFAULTS.peers),
     // A turn shorter than 30 s ends while the user still watches, so a lower setting rounds up.
     notifyAfterMs: typeof notify === 'number' && Number.isFinite(notify) && notify >= 0 ? (notify === 0 ? 0 : Math.max(30, notify) * 1000) : DEFAULTS.notifyAfterMs,
   }

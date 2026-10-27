@@ -6,8 +6,8 @@ import type { ShellState } from './shell'
 const s: ShellState = { mode: 'bash', color: '#4f9a5a', line: '$ npm\ttest', cwd: '/w/app', hp: 64, mp: 80, turnStartedAt: 1000 }
 
 test('a record is one tab-separated line with no tab or newline inside a field', () => {
-  expect(shellRecord(s, 5000)).toBe('1\tbash\t#4f9a5a\t$ npm test\t/w/app\t64\t80\t\t1000\t5000\t\n')
-  expect(shellRecord({ mode: 'ended', color: '', line: '', cwd: '/w' }, 9)).toBe('1\tended\t\t\t/w\t\t\t\t\t9\t\n')
+  expect(shellRecord(s, 5000)).toBe('1\tbash\t#4f9a5a\t$ npm test\t/w/app\t64\t80\t\t1000\t5000\t1\t\n')
+  expect(shellRecord({ mode: 'ended', color: '', line: '', cwd: '/w' }, 9)).toBe('1\tended\t\t\t/w\t\t\t\t\t9\t1\t\n')
 })
 
 test('a record is due when what the shell shows changes, or each minute', () => {

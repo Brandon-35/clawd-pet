@@ -9,7 +9,7 @@ const CAT = { name: 'Mochi', sprite: ['k.....k', 'kkkkkkk', 'kwkkkwk', 'kkkkkkk'
 const usage: SessionUsage = { startedAt: 0, context: { window: 200000, percent: 14 }, rateLimits: [{ kind: 'five_hour', percentUsed: 38 }] }
 
 /** Answers what the mod asks of Claude Code, keeping its toasts in `toasts` and its usage from `readUsage`, and draws Claude Code's own hint line as one Text. Returns the mod's store, kept in memory. */
-function stubEngine(on: On, toasts: string[] = [], readUsage = (): SessionUsage => usage) {
+function stubEngine(on: On, toasts: string[] = [], readUsage = (): SessionUsage => usage, readFile = (_path: string) => JSON.stringify(BLOCK)) {
   const store = new Map<string, unknown>()
   mock.clock(on)
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
@@ -24,7 +24,7 @@ function stubEngine(on: On, toasts: string[] = [], readUsage = (): SessionUsage 
   on('session.start', (_$, e) => e)
   on('session.usage', () => ({ value: readUsage() }))
   on('agent.list', () => ({ value: [] }))
-  on('fs.read', () => ({ value: JSON.stringify(BLOCK) }))
+  on('fs.read', (_$, e) => ({ value: readFile(e.path) }))
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine hint'] }))
   on('ui.status', () => ({ value: undefined }))
   on('ui.toast', (_$, e) => {
@@ -271,4 +271,40 @@ test('a turn that edits code files and runs no check toasts at its end; a check 
 
   const report = await $.command.run({ command: 'clawd', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
   expect(report.text).toContain('- turns with untested edits: 2')
+})
+
+test('/clawd peers lists the other live sessions from their records, and /clawd counts them', async ($, on) => {
+  const files: Record<string, string> = {
+    'self.tsv': '1\talert\t\t\t/w/me\t50\t\t\t\t0\t1\t\n',
+    'a1b2.tsv': '1\talert\t\t\t/w/web\t41\t\t\t\t0\t1\t\n',
+    'c3d4.tsv': '1\tbash\t\trunning npm test\t/w/api\t72\t\t\t-65000\t0\t1\t\n',
+    'gone.tsv': '1\tidle\t\t\t/w/gone\t90\t\t\t\t0\t\n',
+    'notes.txt': 'not a record',
+  }
+  stubEngine(on, [], () => usage, path => (path.startsWith('/home/u/') ? files[path.split('/').pop() ?? ''] ?? '' : JSON.stringify(BLOCK)))
+  on('env.get', () => ({ value: '/home/u' }))
+  on('session.id', () => ({ value: 'self' }))
+  on('session.root', () => ({ value: '/w/me' }))
+  on('fs.list', () => ({ value: Object.keys(files).map(name => ({ name, kind: 'file' as const, size: 1, mtimeMs: name === 'gone.tsv' ? -200000 : 0, isLink: false })) }))
+  await $.session.start({ cwd: '/w/me', surface: 'terminal', isInteractive: true })
+
+  const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect((await run('peers')).text).toBe('- web · ✻ needs you · HP 41%\n- api · running npm test · 1m 05s · HP 72%')
+  expect((await run('')).text).toContain('- peers: 2 live, 1 needs you')
+})
+
+test('with the Peer board off, /clawd peers reads no other session', { options: { peers: false } }, async ($, on) => {
+  stubEngine(on)
+  let listed = false
+  on('env.get', () => ({ value: '/home/u' }))
+  on('session.id', () => ({ value: 'self' }))
+  on('fs.list', () => {
+    listed = true
+    return { value: [] }
+  })
+  await $.session.start({ cwd: '/w/me', surface: 'terminal', isInteractive: true })
+
+  const r = await $.command.run({ command: 'clawd', args: 'peers', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(r.text).toBe('The Peer board setting is off, so other sessions are not read.')
+  expect(listed).toBe(false)
 })

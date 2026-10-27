@@ -90,6 +90,12 @@
       "title": "Shell status",
       "description": "Write what each session is doing to ~/.cache/clawd-pet, for the clawd-pet zsh plugin to show in your prompt.",
       "default": true
+    },
+    "peers": {
+      "type": "boolean",
+      "title": "Peer board",
+      "description": "/clawd peers lists your other live Claude Code sessions on this machine, from the files Shell status writes.",
+      "default": true
     }
   }
 }

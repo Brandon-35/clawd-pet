@@ -18,6 +18,8 @@ import { previewPage } from './preview'
 import { newTurnChecks, noteCommand, noteEdit, untestedWarning } from './checks'
 import { forgetAll, forgetPath, noteRead, noteTokens, readKey, rereadWarning } from './reread'
 import type { Reads } from './reread'
+import { PEER_STALE_MS, livePeers, parseRecord, peersLine, peersReport } from './peers'
+import type { Peer } from './peers'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
 import type { ShellState } from './shell'
@@ -148,6 +150,30 @@ async function keptBody($: EngineInterface) {
   return clawdBody($)
 }
 
+/** The other live sessions, from the records in `dir`. A record not written lately is skipped unread; any failure means fewer peers, never a throw. */
+async function readPeers($: EngineInterface, dir: string, now: number, selfId: string) {
+  let entries
+  try {
+    entries = await $.fs.list(dir)
+  } catch {
+    return []
+  }
+  const fresh = entries.filter(f => f.kind === 'file' && f.name.endsWith('.tsv') && now - f.mtimeMs <= PEER_STALE_MS && f.name !== `${selfId}.tsv`)
+  const peers: Peer[] = []
+  for (const f of fresh) {
+    try {
+      const peer = parseRecord(f.name.slice(0, -4), String(await $.fs.read(`${dir}/${f.name}`)))
+      if (peer) {
+        peers.push(peer)
+      }
+    } catch {
+      // A record removed or half-written meanwhile is a peer fewer.
+    }
+  }
+
+  return livePeers(peers, now, selfId)
+}
+
 export const register: Register = (on, options) => {
   const settings = readSettings(options)
   let isWorking = false
@@ -176,6 +202,8 @@ export const register: Register = (on, options) => {
   const lastTargets = new Map<string, string>() // the target of each tool's latest call, to name its result
   let shellPath: string | undefined // this session's record for the zsh plugin, once its home and id are known
   let shellCwd = ''
+  let home = '' // the user's home, for the peers' records and their names
+  let selfId = ''
   let shellLast = { key: '', at: 0 }
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
@@ -204,11 +232,12 @@ export const register: Register = (on, options) => {
     reads = {}
     lastReadKey = ''
     await countToday($, now, { sessions: 1 })
-    if (settings.shellStatus) {
+    if (settings.shellStatus || settings.peers) {
       try {
-        const home = await $.env.get('HOME')
+        home = (await $.env.get('HOME')) ?? ''
+        selfId = await $.session.id()
         shellCwd = await $.session.root()
-        shellPath = home ? `${home}/${SHELL_DIR}/${await $.session.id()}.tsv` : undefined
+        shellPath = home && settings.shellStatus ? `${home}/${SHELL_DIR}/${selfId}.tsv` : undefined
       } catch {
         shellPath = undefined
       }
@@ -248,7 +277,7 @@ export const register: Register = (on, options) => {
     try {
       await $.command.register({
         name: 'clawd',
-        description: "Clawd's report on this session: turns, tool calls, failures, files edited, and what is left",
+        description: "Clawd's report on this session: turns, tool calls, failures, files edited, and what is left. /clawd peers lists your other live sessions",
         immediate: true,
       })
     } catch {
@@ -502,8 +531,12 @@ export const register: Register = (on, options) => {
     }
   })
 
-  on('command.run', { command: 'clawd' }, async $ => {
+  on('command.run', { command: 'clawd' }, async ($, e) => {
     const t = await $.clock.now()
+    const peers = settings.peers && home ? await readPeers($, `${home}/${SHELL_DIR}`, t, selfId) : []
+    if (e.args.trim() === 'peers') {
+      return { text: settings.peers ? peersReport(peers, t, home) : 'The Peer board setting is off, so other sessions are not read.' }
+    }
 
     const hud = gauges.hud
     const forecast = {
@@ -523,7 +556,7 @@ export const register: Register = (on, options) => {
     }
 
     return {
-      text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today), ...contextLines(breakdown)]
+      text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today), peersLine(peers), ...contextLines(breakdown)]
         .filter(s => s !== '')
         .join('\n'),
     }

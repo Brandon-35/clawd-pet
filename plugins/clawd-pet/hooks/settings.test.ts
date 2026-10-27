@@ -7,8 +7,8 @@ test('no options give the defaults', () => {
 })
 
 test('each option sets its setting', () => {
-  expect(readSettings({ speed: 'fast', sleepAfter: 300, hud: false, hudStyle: 'line', statusLine: false, targets: false, minis: false, toasts: false, notifyAfter: 0, shellStatus: false })).toEqual({
-    pace: 1.6, sleepAfterMs: 300000, hud: false, hudStyle: 'line', statusLine: false, targets: false, minis: false, toasts: false, notifyAfterMs: 0, shellStatus: false,
+  expect(readSettings({ speed: 'fast', sleepAfter: 300, hud: false, hudStyle: 'line', statusLine: false, targets: false, minis: false, toasts: false, notifyAfter: 0, shellStatus: false, peers: false })).toEqual({
+    pace: 1.6, sleepAfterMs: 300000, hud: false, hudStyle: 'line', statusLine: false, targets: false, minis: false, toasts: false, notifyAfterMs: 0, shellStatus: false, peers: false,
   })
 })
 
@@ -24,4 +24,8 @@ test('a notification wait under 30 seconds rounds up to 30', () => {
 
 test('the HUD style is the window unless the setting says line', () => {
   expect([readSettings({ hudStyle: 'line' }).hudStyle, readSettings({ hudStyle: 'tiny' }).hudStyle, readSettings({ hudStyle: 3 }).hudStyle]).toEqual(['line', 'window', 'window'])
+})
+
+test('the peer board is on unless the setting turns it off', () => {
+  expect([readSettings({}).peers, readSettings({ peers: false }).peers, readSettings({ peers: 'no' }).peers]).toEqual([true, false, true])
 })

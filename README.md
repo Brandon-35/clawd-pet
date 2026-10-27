@@ -85,6 +85,16 @@ report on this session, 1h 02m in:
 
 A failed call is one that ran and returned an error; a call you deny does not count. The session counts start over with each session; the last line adds up the whole local day across sessions. The context forecast follows the last few turns and starts over after a compaction; a limit runs out "at this pace" only when that comes before its reset.
 
+Run `/clawd peers` for your other live Claude Code sessions on this machine, the ones waiting on you first:
+
+```text
+- clawd-pet · ✻ needs you · HP 41%
+- api · running npm test · 3m 05s · HP 72%
+- docs · idle · HP 90%
+```
+
+It reads the files each session writes for the zsh prompt, so it sees only sessions with **Shell status** on. Plain `/clawd` adds one line, `- peers: 3 live, 1 needs you`, when any is live. The **Peer board** setting turns both off.
+
 ## The HUD
 
 A rounded window under the prompt, titled with the pet's name:
@@ -163,6 +173,7 @@ Run `/plugin configure clawd-pet@clawd-pet` in a session.
 | Subagent minis | on | One mini per running subagent behind the pet. |
 | Toasts | on | The recap after a long turn, and the warnings for failing or repeated calls, low context, and low or fast-falling rate limits. |
 | Shell status | on | Write each session's state to `~/.cache/clawd-pet/sessions/` for the zsh prompt. |
+| Peer board | on | `/clawd peers` lists your other live sessions on this machine, read from those files. |
 | Notify after (seconds) | `120` | A turn at least this long ends with a desktop notification. `0` turns it off; under `30` counts as `30`. |
 
 Or from a shell, then restart Claude Code:
@@ -171,7 +182,7 @@ Or from a shell, then restart Claude Code:
 echo '{"speed": "fast", "sleepAfter": "300"}' | claude plugin configure clawd-pet@clawd-pet --values-stdin
 ```
 
-The install may say "10 userConfig options not yet set". Every setting has a default, so nothing is needed.
+The install may say "11 userConfig options not yet set". Every setting has a default, so nothing is needed.
 
 ## Update
 
@@ -196,6 +207,7 @@ A mod runs inside Claude Code with your permissions. clawd-pet:
 - sends a desktop notification through Claude Code when a long turn ends, if **Notify after** is not `0`;
 - registers three tools for themes: `get_theme` returns the current theme, `preview_theme` writes a preview page to the path Claude gives it, and `set_theme` stores a theme in the mod's own store;
 - writes one small file per session to `~/.cache/clawd-pet/sessions/` for the zsh prompt, unless **Shell status** is off: the mode, line color, status line, session folder, HP, MP, ST, and timestamps;
+- reads the other sessions' files in that folder for `/clawd peers`, unless **Peer board** is off: it prints them and never acts on their text;
 - makes no network requests and starts no processes, and reads one environment variable, `HOME`, to find that folder.
 
 The zsh plugin reads those files with zsh builtins and deletes ones a dead session left for a day; it starts no process either.

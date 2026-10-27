@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { countCall, countCompaction, countReread, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
+import { countCall, countCompaction, countReread, countTurn, newStats, statsReport, streakWarning, turnCost, turnRecap } from './stats'
 
 test('tool calls count by kind, failures add up, and each edited file counts once', () => {
   let s = newStats(0)
@@ -69,4 +69,33 @@ test('the report counts re-reads only when there were some', () => {
 test('the report counts compactions and the tokens they freed only when there were some', () => {
   expect(statsReport(newStats(0), 0)).not.toContain('compactions')
   expect(statsReport(countCompaction(countCompaction(newStats(0), 121000), 119000), 0).split('\n').pop()).toBe('- compactions: 2, freed ~240k tokens')
+})
+
+test('a turn costs the rise in the session cost, and nothing when either end is unknown or the cost fell', () => {
+  expect(turnCost(1, 1.5)).toBe(0.5)
+  expect(turnCost(1, 1)).toBe(0)
+  expect(turnCost(undefined, 1.5)).toBeUndefined()
+  expect(turnCost(1, undefined)).toBeUndefined()
+  expect(turnCost(2, 1)).toBeUndefined()
+  expect(turnCost(Number.NaN, 1)).toBeUndefined()
+})
+
+test('a long turn\'s recap names its cost from a cent, and never a zero or unknown cost', () => {
+  const s = newStats(0)
+  expect(turnRecap(s, s, 45_000, 'answer', 0.42)).toBe('done in 45s · $0.42')
+  expect(turnRecap(s, s, 45_000, 'answer', 0.004)).toBe('done in 45s')
+  expect(turnRecap(s, s, 45_000, 'answer', 0)).toBe('done in 45s')
+  expect(turnRecap(s, s, 45_000, 'answer', undefined)).toBe('done in 45s')
+  expect(turnRecap(s, s, 45_000, 'answer', Number.NaN)).toBe('done in 45s')
+})
+
+test('the report names the session cost and the last turn\'s, and leaves out what is unknown', () => {
+  const s = countTurn(newStats(0), 1000, 0.42)
+  expect(s.lastTurnUsd).toBe(0.42)
+  expect(statsReport(s, 0, { hp: 50, costUsd: 1.24 }).split('\n').slice(-2)[0]).toBe('- cost: $1.24 this session, $0.42 last turn')
+  expect(statsReport(countTurn(s, 1000, undefined), 0, { hp: 50, costUsd: 1.24 })).toContain('- cost: $1.24 this session\n')
+  expect(statsReport(s, 0, { hp: 50 })).not.toContain('cost')
+  expect(statsReport(s, 0, { hp: 50, costUsd: 0 })).not.toContain('cost')
+  const old: ReturnType<typeof newStats> = { since: 0, turns: 1, workMs: 0, calls: {}, failed: 0, files: [] }
+  expect(statsReport(old, 0, { hp: 50, costUsd: 2 })).toContain('- cost: $2.00 this session\n')
 })

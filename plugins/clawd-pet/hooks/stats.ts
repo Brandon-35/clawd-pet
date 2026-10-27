@@ -1,4 +1,4 @@
-import { aboutTurns, fmtMin, fmtTokens } from './hud'
+import { aboutTurns, fmtMin, fmtTokens, fmtUsd } from './hud'
 import type { Forecast, Hud } from './hud'
 import { fmtDuration } from './status'
 import type { ToolMode } from './status'
@@ -18,6 +18,7 @@ export type Stats = {
   rereads?: number // reads of a file the context already held unchanged
   compactions?: number // compactions of the main conversation
   freed?: number // tokens those compactions freed, summed
+  lastTurnUsd?: number // what the latest main-loop turn cost, when the host keeps a ledger
 }
 
 export const newStats = (since: number): Stats => ({ since, turns: 0, workMs: 0, calls: {}, failed: 0, files: [] })
@@ -35,8 +36,20 @@ export function countCall(s: Stats, mode: ToolMode, file: string, failed: boolea
   }
 }
 
-/** `s` after a main-loop turn that took `durationMs`. */
-export const countTurn = (s: Stats, durationMs: number): Stats => ({ ...s, turns: s.turns + 1, workMs: s.workMs + Math.max(0, durationMs) })
+/** `s` after a main-loop turn that took `durationMs` and cost `usd` (undefined when unknown). */
+export const countTurn = (s: Stats, durationMs: number, usd?: number): Stats => ({ ...s, turns: s.turns + 1, workMs: s.workMs + Math.max(0, durationMs), lastTurnUsd: usd })
+
+const known = (v: number | undefined): v is number => typeof v === 'number' && Number.isFinite(v)
+
+/** What a turn cost from the session cost at its start and its end; undefined when either is unknown or it fell. */
+export function turnCost(startUsd?: number, endUsd?: number) {
+  return known(startUsd) && known(endUsd) && endUsd >= startUsd ? endUsd - startUsd : undefined
+}
+
+const CENT = 0.01 // below a cent, a cost would print as $0.00
+
+/** `usd` as money when it is at least a cent, otherwise nothing. */
+const spent = (usd?: number) => (known(usd) && usd >= CENT ? fmtUsd(usd) : undefined)
 
 /** `s` after one read of something the context already held. */
 export const countReread = (s: Stats): Stats => ({ ...s, rereads: (s.rereads ?? 0) + 1 })
@@ -58,6 +71,8 @@ export function statsReport(s: Stats, now: number, hud?: Hud, forecast: Forecast
     left === undefined
       ? []
       : [`${label} ${left}% left${resetsInMin === undefined ? '' : `, resets in ${fmtMin(resetsInMin)}`}${outMin === undefined ? '' : `, runs out in about ${fmtMin(outMin)} at this pace`}`]
+  const session = spent(hud?.costUsd)
+  const last = spent(s.lastTurnUsd)
   const gauges = hud ? [`context ${hud.hp}% left${aboutTurns(forecast.turns)}`, ...limit('5-hour limit', hud.mp, hud.mpResetsInMin, forecast.mpOutMin), ...limit('7-day limit', hud.st, hud.stResetsInMin, forecast.stOutMin)] : []
 
   return [
@@ -68,6 +83,7 @@ export function statsReport(s: Stats, now: number, hud?: Hud, forecast: Forecast
     `- ${plural(s.files.length, 'file')} edited`,
     ...((s.rereads ?? 0) > 0 ? [`- re-reads: ${s.rereads}`] : []),
     ...((s.compactions ?? 0) > 0 ? [`- compactions: ${s.compactions}, freed ~${fmtTokens(s.freed ?? 0)} tokens`] : []),
+    ...(session ? [`- cost: ${session} this session${last ? `, ${last} last turn` : ''}`] : []),
     ...(gauges.length > 0 ? [`- ${gauges.join(' · ')}`] : []),
   ].join('\n')
 }
@@ -76,9 +92,10 @@ const RECAP_AFTER_MS = 30000 // a shorter turn ends while the user still watches
 
 /**
  * The toast for a main-loop turn that ended for `reason` after `durationMs`, from the counts at its start and its
- * end: what it did, or that it failed. Undefined for a short turn and for one the user stopped.
+ * end: what it did, or that it failed, and what it cost when `costUsd` is a cent or more. Undefined for a short turn
+ * and for one the user stopped.
  */
-export function turnRecap(start: Stats, end: Stats, durationMs: number, reason: 'answer' | 'aborted' | 'refusal' | 'error') {
+export function turnRecap(start: Stats, end: Stats, durationMs: number, reason: 'answer' | 'aborted' | 'refusal' | 'error', costUsd?: number) {
   if (durationMs < RECAP_AFTER_MS || reason === 'aborted') {
     return undefined
   }
@@ -89,6 +106,7 @@ export function turnRecap(start: Stats, end: Stats, durationMs: number, reason: 
     ...(calls > 0 ? [plural(calls, 'tool call')] : []),
     ...(files > 0 ? [`${plural(files, 'file')} edited`] : []),
     ...(failed > 0 ? [`${failed} failed`] : []),
+    ...(spent(costUsd) ? [spent(costUsd)] : []),
   ]
   const head = reason === 'answer' ? `done in ${fmtDuration(durationMs)}` : `the turn ended in ${reason === 'error' ? 'an error' : 'a refusal'} after ${fmtDuration(durationMs)}`
 

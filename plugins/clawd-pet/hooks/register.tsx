@@ -20,7 +20,7 @@ import type { Reads } from './reread'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
 import type { ShellState } from './shell'
-import { callCount, countCall, countCompaction, countReread, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
+import { callCount, countCall, countCompaction, countReread, countTurn, newStats, statsReport, streakWarning, turnCost, turnRecap } from './stats'
 import { compactLine } from './compact'
 import { contextLines } from './context'
 import { addToday, dayOf, readToday, todayLine } from './today'
@@ -165,6 +165,7 @@ export const register: Register = (on, options) => {
   let minis: Mini[] = []
   let stats = newStats(0)
   let turnStats = stats // the counts when the main loop's turn began
+  let turnStartUsd: number | undefined // the session cost when the main loop's turn began
   let repeats: Repeats = {}
   let hps: number[] = [] // the context left at the end of recent turns
   let heaviest: Heavy[] = [] // the session's heaviest tool results, for the report
@@ -403,6 +404,7 @@ export const register: Register = (on, options) => {
       alert = false
       turnStartedAt = await $.clock.now()
       turnStats = stats
+      turnStartUsd = gauges.hud?.costUsd
       repeats = {}
     }
     return next(e)
@@ -412,20 +414,25 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined) {
       alert = false
       turnStartedAt = undefined
-      stats = countTurn(stats, e.durationMs)
-      await countToday($, await $.clock.now(), { turns: 1, workMs: e.durationMs, calls: callCount(stats) - callCount(turnStats) })
       // A fresh reading, kept apart from `hud` so the tick still sees the fall and warns.
       const fresh = await usageOr($, await $.clock.now(), undefined)
       if (fresh) {
         hps = noteTurn(hps, fresh.hp)
       }
-      const recap = settings.toasts ? turnRecap(turnStats, stats, e.durationMs, e.reason) : undefined
+      const usd = turnCost(turnStartUsd, fresh?.costUsd)
+      if (gauges.hud && fresh?.costUsd !== undefined) {
+        // Only the cost: the next turn starts from it, and the readings the tick warns on stay put.
+        gauges = { ...gauges, hud: { ...gauges.hud, costUsd: fresh.costUsd } }
+      }
+      stats = countTurn(stats, e.durationMs, usd)
+      await countToday($, await $.clock.now(), { turns: 1, workMs: e.durationMs, calls: callCount(stats) - callCount(turnStats), usd })
+      const recap = settings.toasts ? turnRecap(turnStats, stats, e.durationMs, e.reason, usd) : undefined
       if (recap) {
         $.ui.toast(recap, { timeoutMs: 8000 })
       }
       if (settings.notifyAfterMs > 0 && e.durationMs >= settings.notifyAfterMs && e.reason !== 'aborted') {
         // The recap is never empty past 30 s, and a notification that cannot be sent is not worth a fault.
-        $.ui.notify(turnRecap(turnStats, stats, e.durationMs, e.reason) ?? 'the turn ended', { title: 'Claude Code' }).catch(() => undefined)
+        $.ui.notify(turnRecap(turnStats, stats, e.durationMs, e.reason, usd) ?? 'the turn ended', { title: 'Claude Code' }).catch(() => undefined)
       }
       const t = await $.clock.now()
       await update($, anim, a => ended(a, e.reason, t))

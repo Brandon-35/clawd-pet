@@ -8,8 +8,8 @@ const BLOCK = { name: 'block', sprite: ['ddddddd', 'ddddddd', 'ddddddd', 'dddddd
 const CAT = { name: 'Mochi', sprite: ['k.....k', 'kkkkkkk', 'kwkkkwk', 'kkkkkkk'], palette: { k: '#e8a33d', w: '#fff4e0' }, eyes: [[0, 1], [4, 1]] }
 const usage: SessionUsage = { startedAt: 0, context: { window: 200000, percent: 14 }, rateLimits: [{ kind: 'five_hour', percentUsed: 38 }] }
 
-/** Answers what the mod asks of Claude Code, keeping its toasts in `toasts`, and draws Claude Code's own hint line as one Text. Returns the mod's store, kept in memory. */
-function stubEngine(on: On, toasts: string[] = []) {
+/** Answers what the mod asks of Claude Code, keeping its toasts in `toasts` and its usage from `readUsage`, and draws Claude Code's own hint line as one Text. Returns the mod's store, kept in memory. */
+function stubEngine(on: On, toasts: string[] = [], readUsage = (): SessionUsage => usage) {
   const store = new Map<string, unknown>()
   mock.clock(on)
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
@@ -22,7 +22,7 @@ function stubEngine(on: On, toasts: string[] = []) {
     return { value: undefined }
   })
   on('session.start', (_$, e) => e)
-  on('session.usage', () => ({ value: usage }))
+  on('session.usage', () => ({ value: readUsage() }))
   on('agent.list', () => ({ value: [] }))
   on('fs.read', () => ({ value: JSON.stringify(BLOCK) }))
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine hint'] }))
@@ -216,4 +216,30 @@ test('a compaction toasts the tokens it freed, counts in the report, and its res
   const report = await $.command.run({ command: 'clawd', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
   expect(report.text).toContain('- compactions: 1, freed ~121k tokens')
   expect(report.text).toContain('1 compaction')
+})
+
+test('a long turn toasts what it cost, the report names it, and the day adds it up', async ($, on) => {
+  const toasts: string[] = []
+  let usd = 1.1
+  const store = stubEngine(on, toasts, () => ({ ...usage, cost: { usd } }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  usd = 1.52
+  await $.turn.complete({ answer: '', durationMs: 45_000, isAborted: false, turnId: 't1', reason: 'answer' })
+  expect(toasts.at(-1)).toBe('done in 45s · $0.42')
+
+  const report = await $.command.run({ command: 'clawd', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(report.text).toContain('- cost: $1.52 this session, $0.42 last turn')
+  expect(report.text).toContain(', $0.42 spent')
+  expect((store.get('today') as { usd: number }).usd).toBeGreaterThan(0.41)
+
+  // The next turn starts from the cost the last one ended on, with no push in between.
+  await $.turn.start({ text: 'again', turnId: 't2' })
+  usd = 2
+  await $.turn.complete({ answer: '', durationMs: 45_000, isAborted: false, turnId: 't2', reason: 'answer' })
+  expect(toasts.at(-1)).toBe('done in 45s · $0.48')
+  expect((store.get('today') as { usd: number }).usd).toBeGreaterThan(0.89)
 })

@@ -190,6 +190,13 @@ export const barWidth = (columns: number) => clamp(BAR_W - Math.max(0, HUD_WINDO
 const HP_WARN = [20, 10]
 const LIMIT_WARN = [10]
 
+/** The forecasts `/clawd` and the toasts print: the turns the context holds, and the minutes until each rate limit runs out, when that beats its reset. */
+export type Forecast = { turns?: number; mpOutMin?: number; stOutMin?: number }
+
+/** The toast when a rate limit's pace runs it out before it resets. */
+export const paceWarning = (label: string, outMin: number, resetsInMin?: number) =>
+  `at this pace the ${label} runs out in about ${fmtMin(outMin)}${resetsInMin === undefined ? '' : `, before it resets in ${fmtMin(resetsInMin)}`}`
+
 /** How many turns the context holds at the recent pace, as the HUD's warnings and `/clawd` say it; '' with no forecast. */
 export const aboutTurns = (turns?: number) => (turns === undefined ? '' : ` (about ${turns} turn${turns === 1 ? '' : 's'} at this pace)`)
 

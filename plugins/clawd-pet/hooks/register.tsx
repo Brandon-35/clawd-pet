@@ -3,12 +3,13 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Anim, Mode } from '../types'
 import { TICK_MS, ended, fail, leapClipMs, step } from './anim'
-import { HUD_WINDOW_W, barWidth, frameColor, gaugeWarnings, hudFrom, hudRows, mood, windowEdges } from './hud'
+import { HUD_WINDOW_W, barWidth, frameColor, gaugeWarnings, hudFrom, hudRows, mood, paceWarning, windowEdges } from './hud'
 import type { Hud } from './hud'
 import { callKey, loopWarning, repeat } from './loops'
 import type { Repeats } from './loops'
 import { minisOnScreen, reconcile } from './minis'
-import { noteTurn, turnsLeft } from './pace'
+import { noteTurn, stepLimit, turnsLeft } from './pace'
+import type { LimitPace } from './pace'
 import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
 import { previewPage } from './preview'
@@ -26,6 +27,8 @@ const GROUND_ROWS = GROUND_H / 2
 const STATUS_ROOM = 20 // columns kept free beside a running pet for its status line
 const USAGE_EVERY_BEATS = 20
 const AGENTS_EVERY_BEATS = 5
+// How long a rate limit's pace must run before it makes a forecast, so one burst does not.
+const PACE_MIN_MS = { mp: 15 * 60000, st: 2 * 3600000 }
 const SLOW_BEATS: Partial<Record<Mode, number>> = { idle: 2, sleep: 4 } // ticks per redraw while nothing moves fast
 
 const THEME_KEY = 'theme' // in $.store: the theme set_theme last took
@@ -115,6 +118,8 @@ export const register: Register = (on, options) => {
   let turnStats = stats // the counts when the main loop's turn began
   let repeats: Repeats = {}
   let hps: number[] = [] // the context left at the end of recent turns
+  let mpPace: LimitPace = {}
+  let stPace: LimitPace = {}
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
   let layoutOf: Body | undefined
@@ -189,6 +194,18 @@ export const register: Register = (on, options) => {
         if (settings.toasts && hud && hud !== before) {
           for (const warning of gaugeWarnings(before, hud, turnsLeft(hps))) {
             $.ui.toast(warning, { timeoutMs: 10000 })
+          }
+        }
+        if (hud && hud !== before) {
+          const mp = stepLimit(mpPace, hud.mp, hud.mpResetsInMin, t, PACE_MIN_MS.mp)
+          const st = stepLimit(stPace, hud.st, hud.stResetsInMin, t, PACE_MIN_MS.st)
+          mpPace = mp.pace
+          stPace = st.pace
+          if (settings.toasts && mp.warn && mp.outMin !== undefined) {
+            $.ui.toast(paceWarning('5-hour limit', mp.outMin, hud.mpResetsInMin), { timeoutMs: 10000 })
+          }
+          if (settings.toasts && st.warn && st.outMin !== undefined) {
+            $.ui.toast(paceWarning('7-day limit', st.outMin, hud.stResetsInMin), { timeoutMs: 10000 })
           }
         }
         $.ui.invalidate('ui.render')
@@ -313,7 +330,17 @@ export const register: Register = (on, options) => {
     }
   })
 
-  on('command.run', { command: 'clawd' }, async $ => ({ text: statsReport(stats, await $.clock.now(), hud, turnsLeft(hps)) }))
+  on('command.run', { command: 'clawd' }, async $ => {
+    const t = await $.clock.now()
+
+    const forecast = {
+      turns: turnsLeft(hps),
+      mpOutMin: stepLimit(mpPace, hud?.mp, hud?.mpResetsInMin, t, PACE_MIN_MS.mp).outMin,
+      stOutMin: stepLimit(stPace, hud?.st, hud?.stResetsInMin, t, PACE_MIN_MS.st).outMin,
+    }
+
+    return { text: statsReport(stats, t, hud, forecast) }
+  })
 
   on('tool.call', { tool: PREVIEW_THEME }, async ($, e) => {
     const { theme, path } = e as unknown as { theme?: unknown; path?: unknown }

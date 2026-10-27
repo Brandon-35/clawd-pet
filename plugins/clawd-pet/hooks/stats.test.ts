@@ -31,7 +31,10 @@ test('the report lists turns, calls by kind, failures, files, and the HUD readin
 })
 
 test('the report says how many turns the context holds at the recent pace', () => {
-  expect(statsReport(newStats(0), 0, { hp: 40 }, 5).split('\n').pop()).toBe('- context 40% left (about 5 turns at this pace)')
+  expect(statsReport(newStats(0), 0, { hp: 40 }, { turns: 5 }).split('\n').pop()).toBe('- context 40% left (about 5 turns at this pace)')
+  expect(statsReport(newStats(0), 0, { hp: 40, mp: 20, mpResetsInMin: 100 }, { mpOutMin: 30 }).split('\n').pop()).toBe(
+    '- context 40% left · 5-hour limit 20% left, resets in 1h40m, runs out in about 30m at this pace',
+  )
 })
 
 test('a fresh session reports zeros without a share', () => {

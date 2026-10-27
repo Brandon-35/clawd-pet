@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { SessionUsage } from 'claude-code'
 
-import { BAR_W, DETAIL_COLOR, HUD_WINDOW_W, barParts, barWidth, fmtMin, frameColor, gaugeWarnings, hudFrom, hudRows, mood, windowEdges } from './hud'
+import { BAR_W, DETAIL_COLOR, HUD_WINDOW_W, barParts, barWidth, fmtMin, frameColor, gaugeWarnings, hudFrom, hudRows, mood, paceWarning, windowEdges } from './hud'
 
 const usage = (over: Partial<SessionUsage> = {}): SessionUsage => ({
   startedAt: 0,
@@ -107,4 +107,5 @@ test('a gauge warns once as it falls to a mark, and again only after it climbs b
   expect(gaugeWarnings(undefined, { hp: 90 })).toEqual([])
   expect(gaugeWarnings({ hp: 25 }, { hp: 18 }, 3)).toEqual(['context 18% left (about 3 turns at this pace): run /compact at a good stopping point'])
   expect(gaugeWarnings({ hp: 25 }, { hp: 18 }, 1)[0]).toContain('(about 1 turn at this pace)')
+  expect(paceWarning('5-hour limit', 40, 130)).toBe('at this pace the 5-hour limit runs out in about 40m, before it resets in 2h10m')
 })

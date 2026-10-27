@@ -506,3 +506,43 @@ test('an advisor that never runs under the main model toasts once, counts in the
   expect(filled.length).toBe(1)
   expect(toasts.filter(t => t.includes('never runs')).length).toBe(1)
 })
+
+test('main-loop steps toast a cold cache, a cut reply and a fallback once per turn, and /clawd reports the cache share', async ($, on) => {
+  const toasts: string[] = []
+  stubEngine(on, toasts)
+  on('settings.read', () => ({ value: {} }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  const usage = (read: number, created: number, model = 'claude-opus-5-5') => ({ input_tokens: 10, output_tokens: 5, cache_read_input_tokens: read, cache_creation_input_tokens: created, model })
+  let next: { stopReason: 'end_turn' | 'max_tokens'; usage: ReturnType<typeof usage> } = { stopReason: 'end_turn', usage: usage(0, 0) }
+  on('turn.step', async function* (_$, e) {
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], ...next }
+  })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  const stepOnce = async (step: typeof next, agentId?: string) => {
+    next = step
+    const s = $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1, ...(agentId !== undefined && { agentId }) })
+    let chunk = await s.next()
+    while (!chunk.done) {
+      chunk = await s.next()
+    }
+    return chunk.value
+  }
+
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await stepOnce({ stopReason: 'end_turn', usage: usage(0, 57215) })
+  expect(toasts).toEqual([])
+  await stepOnce({ stopReason: 'max_tokens', usage: usage(1000, 57215, 'claude-sonnet-5-5') }, 'sub1')
+  expect(toasts).toEqual([])
+  await stepOnce({ stopReason: 'max_tokens', usage: usage(1000, 57215, 'claude-sonnet-5-5') })
+  await stepOnce({ stopReason: 'max_tokens', usage: usage(1000, 57215, 'claude-sonnet-5-5') })
+  expect(toasts).toEqual(['❄ prompt cache went cold: 57k tokens re-cached', '✂ the reply hit max_tokens and was cut', '↯ answered by sonnet, not opus'])
+
+  await $.turn.complete({ answer: '', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' })
+  await $.turn.start({ text: 'again', turnId: 't2' })
+  await stepOnce({ stopReason: 'max_tokens', usage: usage(178000, 0) })
+  expect(toasts.at(-1)).toBe('✂ the reply hit max_tokens and was cut')
+
+  const report = await $.command.run({ command: 'clawd', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(report.text).toContain('- cache: 51% of input read from cache')
+})

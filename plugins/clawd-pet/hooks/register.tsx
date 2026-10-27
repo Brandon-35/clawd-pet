@@ -27,6 +27,8 @@ import type { Peer } from './peers'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
 import type { ShellState } from './shell'
+import { cacheLine, countCache, NO_CACHE, stepAlerts } from './steps'
+import type { CacheUse } from './steps'
 import { callCount, countCall, countCompaction, countReread, countSent, countTurn, countUntested, newStats, statsReport, streakWarning, turnCost, turnRecap } from './stats'
 import { compactLine } from './compact'
 import { contextLines } from './context'
@@ -231,6 +233,8 @@ export const register: Register = (on, options) => {
   let sessionAdvisor: AdvisorUse = { calls: 0, ms: 0 }
   let turnAdvisor: AdvisorUse = { calls: 0, ms: 0 } // the main loop's turn
   const advisorTold = new Set<string>() // the (main, advisor) families an idle-advisor toast already named
+  let cache: CacheUse = NO_CACHE // the main loop's input tokens this session
+  const stepTold = new Set<string>() // the step alerts this turn already toasted
 
   // The band leaves the last column free, so a full row never wraps.
   const bandWidth = () => Math.max(BODY_W, bodyColumns - 1)
@@ -260,6 +264,8 @@ export const register: Register = (on, options) => {
     sessionAdvisor = { calls: 0, ms: 0 }
     turnAdvisor = { calls: 0, ms: 0 }
     advisorTold.clear()
+    cache = NO_CACHE
+    stepTold.clear()
     await countToday($, now, { sessions: 1 })
     if (settings.shellStatus || settings.peers) {
       try {
@@ -493,6 +499,7 @@ export const register: Register = (on, options) => {
       repeats = {}
       checks = newTurnChecks()
       turnAdvisor = { calls: 0, ms: 0 }
+      stepTold.clear()
       advisorModel = await readAdvisor($)
     }
     return next(e)
@@ -515,6 +522,13 @@ export const register: Register = (on, options) => {
         $.ui.toast(toast, { timeoutMs: 10000 })
       }
     }
+    for (const a of settings.toasts ? stepAlerts(cache, e.model, r) : []) {
+      if (!stepTold.has(a.kind)) {
+        stepTold.add(a.kind)
+        $.ui.toast(a.text, { timeoutMs: 10000 })
+      }
+    }
+    cache = countCache(cache, r.usage)
     return r
   })
 
@@ -727,7 +741,7 @@ export const register: Register = (on, options) => {
     }
 
     return {
-      text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today), advisorLine(mainModel, advisorModel, sessionAdvisor), peersLine(peers), ...contextLines(breakdown), notesLine(notes, t)]
+      text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today), advisorLine(mainModel, advisorModel, sessionAdvisor), cacheLine(cache), peersLine(peers), ...contextLines(breakdown), notesLine(notes, t)]
         .filter(s => s !== '')
         .join('\n'),
     }

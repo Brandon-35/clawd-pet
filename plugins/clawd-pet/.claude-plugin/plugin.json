@@ -43,6 +43,16 @@
       "description": "The HP, MP, and ST bars below the prompt.",
       "default": true
     },
+    "hudStyle": {
+      "type": "string",
+      "title": "HUD style",
+      "description": "window: the framed HUD with token counts, forecasts, and the session's cost. line: one unframed row, for a small terminal.",
+      "options": [
+        "window",
+        "line"
+      ],
+      "default": "window"
+    },
     "statusLine": {
       "type": "boolean",
       "title": "Status line",

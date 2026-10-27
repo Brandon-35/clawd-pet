@@ -1,7 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { SessionUsage } from 'claude-code'
 
-import { BAR_W, DETAIL_COLOR, HUD_WINDOW_W, barParts, barWidth, fmtMin, frameColor, gaugeWarnings, hudFrom, hudRows, mood, paceWarning, windowEdges } from './hud'
+import { BAR_W, DETAIL_COLOR, HUD_WINDOW_W, barParts, barWidth, fmtMin, fmtTokens, fmtUsd, frameColor, gaugeWarnings, hudFrom, hudLine, hudRows, mood, paceWarning, windowEdges } from './hud'
+import type { HudPart } from './hud'
 
 const usage = (over: Partial<SessionUsage> = {}): SessionUsage => ({
   startedAt: 0,
@@ -14,7 +15,7 @@ const usage = (over: Partial<SessionUsage> = {}): SessionUsage => ({
 })
 
 test('HP is the context left, MP the five-hour limit left, ST the seven-day one, each with its reset in minutes', () => {
-  expect(hudFrom(usage(), 36 * 60000)).toEqual({ hp: 86, mp: 62, mpResetsInMin: 97, st: 64, stResetsInMin: 4560 })
+  expect(hudFrom(usage(), 36 * 60000)).toEqual({ hp: 86, mp: 62, mpResetsInMin: 97, st: 64, stResetsInMin: 4560, tokens: undefined, window: 200000, costUsd: undefined })
 })
 
 test('off a subscription there is no MP or ST; before the first response the context is full', () => {
@@ -79,7 +80,7 @@ test('the window has rounded corners, spans its width, and carries the title in 
 })
 
 test('the bars narrow on a narrow terminal, down to six cells', () => {
-  expect([barWidth(120), barWidth(HUD_WINDOW_W), barWidth(40), barWidth(10)]).toEqual([BAR_W, BAR_W, BAR_W - 6, 6])
+  expect([barWidth(120), barWidth(HUD_WINDOW_W), barWidth(HUD_WINDOW_W - 6), barWidth(10)]).toEqual([BAR_W, BAR_W, BAR_W - 6, 6])
   expect(hudRows({ hp: 50 }, {}, 8)[0]!.bar.map(p => p.text).join('')).toBe('━━━━────')
 })
 
@@ -108,4 +109,49 @@ test('a gauge warns once as it falls to a mark, and again only after it climbs b
   expect(gaugeWarnings({ hp: 25 }, { hp: 18 }, 3)).toEqual(['context 18% left (about 3 turns at this pace): run /compact at a good stopping point'])
   expect(gaugeWarnings({ hp: 25 }, { hp: 18 }, 1)[0]).toContain('(about 1 turn at this pace)')
   expect(paceWarning('5-hour limit', 40, 130)).toBe('at this pace the 5-hour limit runs out in about 40m, before it resets in 2h10m')
+})
+
+const joined = (parts: HudPart[]) => parts.map(p => p.text).join('')
+
+test('the HUD reads the tokens used, the window, and the cost, from usage or a measurement', () => {
+  const h = hudFrom({ context: { tokens: 28000, window: 200000, percent: 14 }, rateLimits: [], cost: { usd: 1.24 } }, 0)
+  expect([h.tokens, h.window, h.costUsd]).toEqual([28000, 200000, 1.24])
+  expect(hudFrom(usage({ cost: { usd: Number.NaN } }), 0).costUsd).toBeUndefined()
+})
+
+test('tokens read compact, and dollars keep cents under a hundred', () => {
+  expect([950, 9500, 2000, 28400, 999400, 999600, 1200000].map(fmtTokens)).toEqual(['950', '9.5k', '2k', '28k', '999k', '1M', '1.2M'])
+  expect([0.42, 12.3, 123.4].map(fmtUsd)).toEqual(['$0.42', '$12.30', '$123'])
+})
+
+test('HP details the tokens used of the window and the turns left, joined with dots', () => {
+  const [hp] = hudRows({ hp: 86, tokens: 28000, window: 200000 }, {}, BAR_W, { turns: 24 })
+  expect(joined(hp!.parts)).toBe('  86%  28k/200k · ~24 turns')
+  expect(joined(hudRows({ hp: 90 }, {}, BAR_W, { turns: 1 })[0]!.parts)).toBe('  90%  ~1 turn')
+  expect(joined(hudRows({ hp: 8, tokens: 184000, window: 200000 })[0]!.parts)).toBe('   8%  /compact  184k/200k')
+})
+
+test('a limit warns in amber when its pace runs it out before it resets', () => {
+  const h = { hp: 90, mp: 40, mpResetsInMin: 133, st: 60, stResetsInMin: 600 }
+  const [, mp, st] = hudRows(h, {}, BAR_W, { mpOutMin: 65, stOutMin: 900 })
+  expect(joined(mp!.parts)).toBe('  40%  ↻ 2h13m · ⚠ out 1h05m')
+  expect(mp!.parts.at(-1)?.color).toBe('#d99a1a')
+  expect(joined(st!.parts)).toBe('  60%  ↻ 10h00m')
+})
+
+test('the top edge carries a right title, such as the cost, when it fits', () => {
+  const { top } = windowEdges(HUD_WINDOW_W, 'Clawd', '$1.24')
+  expect([...top].length).toBe(HUD_WINDOW_W)
+  expect(top.startsWith('╭─ Clawd ─')).toBe(true)
+  expect(top.endsWith('─ $1.24 ─╮')).toBe(true)
+  expect(windowEdges(12, 'Clawd', '$1.24').top).toBe('╭─ Clawd ──╮')
+})
+
+test('the line style puts every bar on one row with MP reset, warnings, and cost', () => {
+  const h = { hp: 86, mp: 62, mpResetsInMin: 133, st: 64, stResetsInMin: 4476, costUsd: 1.24 }
+  const parts = hudLine(h, {}, { mpOutMin: 65 })
+  expect(joined(parts)).toBe('HP ━━━━━━━─ 86% · MP ━━━━━─── 62% ↻2h13m ⚠1h05m · ST ━━━━━─── 64% · $1.24')
+  expect(parts.filter(p => p.bold && p.text.endsWith(' ') && !p.text.startsWith(' ')).map(p => p.text)).toEqual(['HP ', 'MP ', 'ST '])
+  expect(joined(hudLine({ hp: 8 }, { hp: { label: 'FUEL' } }))).toBe('FUEL ╸─────── 8% /compact')
+  expect(hudLine({ hp: 50 }, { hp: false })).toEqual([])
 })

@@ -11,6 +11,9 @@ export type Hud = {
   mpResetsInMin?: number
   st?: number // the 7-day rate limit left, %; absent like MP
   stResetsInMin?: number
+  tokens?: number // context tokens used; absent before the first response
+  window?: number // the context window's size in tokens
+  costUsd?: number // what the session has cost so far; absent where the host keeps no ledger
 }
 
 export type Mood = 'ok' | 'worried' | 'critical' | 'tired'
@@ -27,7 +30,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 const finite = (v: number | undefined) => (v !== undefined && Number.isFinite(v) ? v : undefined)
 
 /** One rate-limit window: the share left, and the minutes until it resets. Both absent without a reading. */
-function limitLeft(u: SessionUsage, kind: string, now: number) {
+function limitLeft(u: Usage, kind: string, now: number) {
   const limit = u.rateLimits.find(r => r.kind === kind && finite(r.percentUsed) !== undefined)
   const resets = limit?.resetsAt ? Date.parse(limit.resetsAt) : Number.NaN
 
@@ -37,7 +40,10 @@ function limitLeft(u: SessionUsage, kind: string, now: number) {
   }
 }
 
-export function hudFrom(u: SessionUsage, now: number): Hud {
+/** The usage figures the HUD reads: `$.session.usage()`'s answer, or a `session.measure` input. */
+export type Usage = Pick<SessionUsage, 'context' | 'rateLimits' | 'cost'>
+
+export function hudFrom(u: Usage, now: number): Hud {
   const mp = limitLeft(u, 'five_hour', now)
   const st = limitLeft(u, 'seven_day', now)
 
@@ -47,6 +53,9 @@ export function hudFrom(u: SessionUsage, now: number): Hud {
     mpResetsInMin: mp.resetsInMin,
     st: st.left,
     stResetsInMin: st.resetsInMin,
+    tokens: finite(u.context.tokens),
+    window: finite(u.context.window),
+    costUsd: finite(u.cost?.usd),
   }
 }
 
@@ -69,6 +78,22 @@ export function fmtMin(m: number) {
 
   return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m` : `${m}m`
 }
+
+/** One figure under 10 with a decimal (dropped when it rounds to whole), else whole: `9.5`, `2`, `28`. */
+const short = (v: number) => String(v < 9.95 ? Math.round(v * 10) / 10 : Math.round(v))
+
+/** Tokens as the HUD prints them: `950`, `9.5k`, `28k`, `1.2M`. */
+export function fmtTokens(n: number) {
+  const t = Math.round(n)
+  if (t < 1000) {
+    return String(t)
+  }
+
+  return t < 999500 ? `${short(t / 1000)}k` : `${short(t / 1e6)}M`
+}
+
+/** Dollars as the HUD prints them: `$0.42`, `$12.30`, then whole dollars from `$100`. */
+export const fmtUsd = (usd: number) => (usd < 99.995 ? `$${usd.toFixed(2)}` : `$${Math.round(usd)}`)
 
 type Pair = [number, number]
 const CLAY: Pair = [0xa84d33, 0xe88f6a]
@@ -115,13 +140,28 @@ export function barParts(pct: number, [from, to]: Pair, width = BAR_W): HudPart[
 }
 
 const reading = (text: string, [from, to]: Pair): HudPart => ({ text: ` ${text.padStart(4)}`, color: cssColor(mix(from, to, 0.6)), bold: true })
-const detail = (bits: (string | undefined)[]): HudPart[] => {
-  const text = bits.filter(b => b !== undefined).join('  ')
+const grey = (text: string | undefined): HudPart | undefined => (text === undefined ? undefined : { text, color: DETAIL_COLOR })
 
-  return text ? [{ text: `  ${text}`, color: DETAIL_COLOR }] : []
+/** The details after a reading, joined with grey dots. */
+function details(bits: (HudPart | undefined)[]) {
+  const parts: HudPart[] = []
+  for (const b of bits) {
+    if (b) {
+      const sep = parts.length === 0 ? '  ' : ' · '
+      parts.push(...(b.color === DETAIL_COLOR ? [{ ...b, text: sep + b.text }] : [{ text: sep, color: DETAIL_COLOR }, b]))
+    }
+  }
+
+  return parts
 }
 
 const resets = (min: number | undefined) => (min === undefined ? undefined : `↻ ${fmtMin(min)}`)
+
+/** The amber warning that a limit runs out at this pace before it resets, or undefined when it holds. */
+const runsOut = (outMin: number | undefined, resetsInMin: number | undefined, text: (out: string) => string): HudPart | undefined =>
+  outMin === undefined || (resetsInMin !== undefined && outMin >= resetsInMin) ? undefined : { text: text(fmtMin(outMin)), color: cssColor(AMBER[1]) }
+
+const compactHint = (): HudPart => ({ ...reading('', RED), text: '  /compact' })
 
 const pairOf = (fill: [string, string] | undefined, fallback: Pair): Pair => (fill ? [parseInt(fill[0].slice(1), 16), parseInt(fill[1].slice(1), 16)] : fallback)
 
@@ -129,7 +169,7 @@ const pairOf = (fill: [string, string] | undefined, fallback: Pair): Pair => (fi
  * The HUD's rows: HP, and MP and ST when the session has their readings, each in the pet's `look` unless
  * the look hides it. A bar's warning colors (amber and red) replace its fill whatever the look.
  */
-export function hudRows(h: Hud, look: HudLook = {}, width = BAR_W): HudRow[] {
+export function hudRows(h: Hud, look: HudLook = {}, width = BAR_W, forecast: Forecast = {}): HudRow[] {
   const rows: (HudRow & { look: BarLook | false | undefined })[] = []
   const hpFill = h.hp > 50 ? pairOf(look.hp ? look.hp.fill : undefined, CLAY) : h.hp > 25 ? AMBER : RED
   rows.push({
@@ -138,7 +178,14 @@ export function hudRows(h: Hud, look: HudLook = {}, width = BAR_W): HudRow[] {
     label: 'HP',
     color: cssColor(CLAY[1]),
     bar: barParts(h.hp, hpFill, width),
-    parts: [reading(`${h.hp}%`, hpFill), ...(h.hp < 10 ? [{ ...reading('', RED), text: '  /compact' }] : [])],
+    parts: [
+      reading(`${h.hp}%`, hpFill),
+      ...(h.hp < 10 ? [compactHint()] : []),
+      ...details([
+        grey(h.tokens === undefined || h.window === undefined ? undefined : `${fmtTokens(h.tokens)}/${fmtTokens(h.window)}`),
+        grey(forecast.turns === undefined ? undefined : `~${forecast.turns} turn${forecast.turns === 1 ? '' : 's'}`),
+      ]),
+    ],
   })
   if (h.mp !== undefined) {
     const mpFill = h.mp < 15 ? RED : pairOf(look.mp ? look.mp.fill : undefined, SKY)
@@ -148,7 +195,7 @@ export function hudRows(h: Hud, look: HudLook = {}, width = BAR_W): HudRow[] {
       label: 'MP',
       color: cssColor(SKY[1]),
       bar: barParts(h.mp, mpFill, width),
-      parts: [reading(`${h.mp}%`, mpFill), ...detail([resets(h.mpResetsInMin)])],
+      parts: [reading(`${h.mp}%`, mpFill), ...details([grey(resets(h.mpResetsInMin)), runsOut(forecast.mpOutMin, h.mpResetsInMin, out => `⚠ out ${out}`)])],
     })
   }
   if (h.st !== undefined) {
@@ -159,7 +206,7 @@ export function hudRows(h: Hud, look: HudLook = {}, width = BAR_W): HudRow[] {
       label: 'ST',
       color: cssColor(GOLD[1]),
       bar: barParts(h.st, stFill, width),
-      parts: [reading(`${h.st}%`, stFill), ...detail([resets(h.stResetsInMin)])],
+      parts: [reading(`${h.st}%`, stFill), ...details([grey(resets(h.stResetsInMin)), runsOut(forecast.stOutMin, h.stResetsInMin, out => `⚠ out ${out}`)])],
     })
   }
   const shown = rows
@@ -171,17 +218,55 @@ export function hudRows(h: Hud, look: HudLook = {}, width = BAR_W): HudRow[] {
   return shown.map(r => ({ ...r, label: r.label + ' '.repeat(labelW - [...r.label].length) }))
 }
 
-/** The window's edges as text, `width` cells across, corners included: rounded corners, the title in the top edge. */
-export function windowEdges(width: number, title = '') {
+const LINE_BAR_W = 8 // cells of each bar in the one-line HUD
+
+/**
+ * The HUD as one unframed row, for a small terminal: each shown bar with its label and reading, MP's reset time,
+ * the amber run-out warnings, and the session's cost, joined with grey dots.
+ */
+export function hudLine(h: Hud, look: HudLook = {}, forecast: Forecast = {}): HudPart[] {
+  const parts: HudPart[] = []
+  for (const r of hudRows(h, look, LINE_BAR_W)) {
+    const read = r.parts[0]!
+    parts.push(
+      ...(parts.length > 0 ? [{ text: ' · ', color: DETAIL_COLOR }] : []),
+      { text: `${r.label.trimEnd()} `, color: r.color, bold: true },
+      ...r.bar,
+      { ...read, text: ` ${read.text.trim()}` },
+    )
+    if (r.key === 'hp' && h.hp < 10) {
+      parts.push({ ...compactHint(), text: ' /compact' })
+    }
+    if (r.key === 'mp' && h.mpResetsInMin !== undefined) {
+      parts.push({ text: ` ↻${fmtMin(h.mpResetsInMin)}`, color: DETAIL_COLOR })
+    }
+    const out = r.key === 'mp' ? runsOut(forecast.mpOutMin, h.mpResetsInMin, t => ` ⚠${t}`) : r.key === 'st' ? runsOut(forecast.stOutMin, h.stResetsInMin, t => ` ⚠${t}`) : undefined
+    if (out) {
+      parts.push(out)
+    }
+  }
+  if (h.costUsd !== undefined) {
+    parts.push({ text: `${parts.length > 0 ? ' · ' : ''}${fmtUsd(h.costUsd)}`, color: DETAIL_COLOR })
+  }
+
+  return parts
+}
+
+/**
+ * The window's edges as text, `width` cells across, corners included: rounded corners, the title at the left of the
+ * top edge, and `right` at its right when it fits.
+ */
+export function windowEdges(width: number, title = '', right = '') {
   const run = Math.max(0, width - 2)
   const head = title ? `─ ${title} ` : ''
-  const top = `╭${(head + '─'.repeat(run)).slice(0, run)}╮`
+  const tail = right && [...head].length + right.length + 4 <= run ? ` ${right} ─` : ''
+  const top = `╭${(head + '─'.repeat(run)).slice(0, run - tail.length)}${tail}╮`
 
   return { top, side: '│', bottom: `╰${'─'.repeat(run)}╯` }
 }
 
-/** The HUD window's width in cells, sides included: room for a label, a full bar, a reading and a reset time. */
-export const HUD_WINDOW_W = 46
+/** The HUD window's width in cells, sides included: room for a label, a full bar, a reading and its details. */
+export const HUD_WINDOW_W = 58
 
 /** The bar width that fits a window `columns` wide: the full BAR_W, down to 6 cells on a narrow terminal. */
 export const barWidth = (columns: number) => clamp(BAR_W - Math.max(0, HUD_WINDOW_W - columns), 6, BAR_W)

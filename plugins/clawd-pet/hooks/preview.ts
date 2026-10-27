@@ -1,7 +1,7 @@
 import type { Anim, Mode } from '../types'
 import { TICK_MS, leapClipMs, step } from './anim'
-import { HUD_WINDOW_W, frameColor, hudRows, windowEdges } from './hud'
-import type { Hud } from './hud'
+import { HUD_WINDOW_W, fmtUsd, frameColor, hudLine, hudRows, windowEdges } from './hud'
+import type { Forecast, Hud, HudPart } from './hud'
 import { BODY_W, FACES, HEIGHT, MODES, compose, composeFace } from './pixels'
 import type { Body, Canvas, Clip } from './pixels'
 import { GROUND_H, drawBand, layScene, obstacleSpans } from './scene'
@@ -28,9 +28,9 @@ const WHEN: Record<Mode, string> = {
 }
 // What the status line names in each mode, for the lines that name something.
 const SAMPLE_TARGET: Partial<Record<Mode, string>> = { read: 'app.ts', search: 'useState', edit: 'app.ts', bash: 'npm test', web: 'docs.anthropic.com' }
-const SAMPLE_HUDS: [string, Hud][] = [
-  ['Early in a session', { hp: 86, mp: 72, mpResetsInMin: 213, st: 64, stResetsInMin: 4560 }],
-  ['Running low', { hp: 22, mp: 12, mpResetsInMin: 41, st: 9, stResetsInMin: 1500 }],
+const SAMPLE_HUDS: [string, Hud, Forecast][] = [
+  ['Early in a session', { hp: 86, tokens: 28000, window: 200000, costUsd: 1.24, mp: 72, mpResetsInMin: 213, st: 64, stResetsInMin: 4560 }, { turns: 24 }],
+  ['Running low', { hp: 22, tokens: 156000, window: 200000, costUsd: 12.3, mp: 12, mpResetsInMin: 41, st: 9, stResetsInMin: 1500 }, { turns: 3, mpOutMin: 18, stOutMin: 600 }],
 ]
 const MOTION_FPS = 10
 const SCENE_W = 96 // columns of the sample band
@@ -116,15 +116,18 @@ export function previewPage(body: Body, notes: string[]): string {
       return `<div class="lines"><b>${mode}</b><ul style="color: ${lineColor(mode, body.look.lineColors)}">${lines}</ul></div>`
     })
     .join('')
-  const edges = windowEdges(HUD_WINDOW_W, body.name)
-  const huds = SAMPLE_HUDS.map(([label, h]) => {
-    const rows = hudRows(h, body.look.hud)
+  const spans = (parts: HudPart[]) => parts.map(p => `<span style="color: ${p.color}${p.bold ? '; font-weight: bold' : ''}">${escapeHtml(p.text)}</span>`).join('')
+  const huds = SAMPLE_HUDS.map(([label, h, forecast]) => {
+    const edges = windowEdges(HUD_WINDOW_W, body.name, h.costUsd === undefined ? '' : fmtUsd(h.costUsd))
+    const rows = hudRows(h, body.look.hud, undefined, forecast)
+    const line = hudLine(h, body.look.hud, forecast)
     const inside = rows.length === 0
       ? '<p>The pet hides every bar, so the HUD does not show.</p>'
       : `<pre class="hud" style="color: ${frameColor(body.look.hud)}">${escapeHtml(edges.top)}\n${rows
-          .map(r => `${edges.side} <span style="color: ${r.color}; font-weight: bold">${escapeHtml(r.label)} </span>${r.bar.map(p => `<span style="color: ${p.color}">${escapeHtml(p.text)}</span>`).join('')}${r.parts.map(p => `<span style="color: ${p.color}${p.bold ? '; font-weight: bold' : ''}">${escapeHtml(p.text)}</span>`).join('')}${' '.repeat(Math.max(0, HUD_WINDOW_W - 3 - [r.label, ' ', ...r.bar, ...r.parts].reduce((n, p) => n + [...(typeof p === 'string' ? p : p.text)].length, 0)))}${edges.side}`)
+          .map(r => `${edges.side} <span style="color: ${r.color}; font-weight: bold">${escapeHtml(r.label)} </span>${spans(r.bar)}${spans(r.parts)}${' '.repeat(Math.max(0, HUD_WINDOW_W - 3 - [r.label, ' ', ...r.bar, ...r.parts].reduce((n, p) => n + [...(typeof p === 'string' ? p : p.text)].length, 0)))}${edges.side}`)
           .join('\n')}\n${escapeHtml(edges.bottom)}</pre>`
-    return `<figure class="wide"><figcaption><b>${label}</b></figcaption>${inside}</figure>`
+    const oneLine = line.length === 0 ? '' : `<p>The line style</p><pre class="hud">${spans(line)}</pre>`
+    return `<figure class="wide"><figcaption><b>${label}</b></figcaption>${inside}${oneLine}</figure>`
   }).join('')
   const noteList = notes.length > 0 ? `<section class="notes"><h2>Notes</h2><ul>${notes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul></section>` : ''
 

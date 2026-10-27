@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Anim, Mode } from '../types'
 import { TICK_MS, ended, fail, leapClipMs, needsUser, step } from './anim'
-import { HUD_WINDOW_W, barWidth, frameColor, gaugeWarnings, hudFrom, hudRows, mood, paceWarning, windowEdges } from './hud'
+import { HUD_WINDOW_W, barWidth, fmtUsd, frameColor, gaugeWarnings, hudFrom, hudLine, hudRows, mood, paceWarning, windowEdges } from './hud'
 import type { Hud } from './hud'
 import { callKey, loopWarning, repeat } from './loops'
 import type { Repeats } from './loops'
@@ -59,6 +59,35 @@ async function usageOr($: EngineInterface, now: number, last: Hud | undefined) {
   } catch {
     return last
   }
+}
+
+/** The HUD's last reading, each rate limit's pace, and the minutes until each runs out when that beats its reset. */
+type Gauges = { hud?: Hud; mpPace: LimitPace; stPace: LimitPace; mpOutMin?: number; stOutMin?: number }
+
+/**
+ * The gauges after a `fresh` reading at `t`: toasts for the gauges that fell to a mark and the limits whose pace runs
+ * them out first, then a redraw of the HUD. No reading, or the last one again, changes nothing.
+ */
+function takeReading($: EngineInterface, g: Gauges, fresh: Hud | undefined, t: number, toasts: boolean, turns: number | undefined): Gauges {
+  if (!fresh || fresh === g.hud) {
+    return g
+  }
+  if (toasts) {
+    for (const warning of gaugeWarnings(g.hud, fresh, turns)) {
+      $.ui.toast(warning, { timeoutMs: 10000 })
+    }
+  }
+  const mp = stepLimit(g.mpPace, fresh.mp, fresh.mpResetsInMin, t, PACE_MIN_MS.mp)
+  const st = stepLimit(g.stPace, fresh.st, fresh.stResetsInMin, t, PACE_MIN_MS.st)
+  if (toasts && mp.warn && mp.outMin !== undefined) {
+    $.ui.toast(paceWarning('5-hour limit', mp.outMin, fresh.mpResetsInMin), { timeoutMs: 10000 })
+  }
+  if (toasts && st.warn && st.outMin !== undefined) {
+    $.ui.toast(paceWarning('7-day limit', st.outMin, fresh.stResetsInMin), { timeoutMs: 10000 })
+  }
+  $.ui.invalidate('ui.render')
+
+  return { hud: fresh, mpPace: mp.pace, stPace: st.pace, mpOutMin: mp.outMin, stOutMin: st.outMin }
 }
 
 /** The minis after a fresh look at the session's agents, or `last` when the list call fails. */
@@ -125,17 +154,15 @@ export const register: Register = (on, options) => {
   let compacting = false
   let turnStartedAt: number | undefined // the main loop's turn running now
   let body: Body | undefined
-  let hud: Hud | undefined
+  let gauges: Gauges = { mpPace: {}, stPace: {} } // pushed by session.measure, polled by the tick as a fallback
   let minis: Mini[] = []
   let stats = newStats(0)
   let turnStats = stats // the counts when the main loop's turn began
   let repeats: Repeats = {}
   let hps: number[] = [] // the context left at the end of recent turns
-  let mpPace: LimitPace = {}
   let shellPath: string | undefined // this session's record for the zsh plugin, once its home and id are known
   let shellCwd = ''
   let shellLast = { key: '', at: 0 }
-  let stPace: LimitPace = {}
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
   let layoutOf: Body | undefined
@@ -157,7 +184,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     const now = await $.clock.now()
     await update($, anim, () => ({ mode: 'idle', since: now, x: 0, dir: 1, tick: 0, target: '', working: false }))
-    hud = await usageOr($, now, undefined)
+    gauges = { ...gauges, hud: await usageOr($, now, undefined) }
     stats = newStats(now)
     await countToday($, now, { sessions: 1 })
     if (settings.shellStatus) {
@@ -215,26 +242,9 @@ export const register: Register = (on, options) => {
       const t = await $.clock.now()
       beat += 1
       if (beat % USAGE_EVERY_BEATS === 0) {
-        const before = hud
-        hud = await usageOr($, t, hud)
-        if (settings.toasts && hud && hud !== before) {
-          for (const warning of gaugeWarnings(before, hud, turnsLeft(hps))) {
-            $.ui.toast(warning, { timeoutMs: 10000 })
-          }
-        }
-        if (hud && hud !== before) {
-          const mp = stepLimit(mpPace, hud.mp, hud.mpResetsInMin, t, PACE_MIN_MS.mp)
-          const st = stepLimit(stPace, hud.st, hud.stResetsInMin, t, PACE_MIN_MS.st)
-          mpPace = mp.pace
-          stPace = st.pace
-          if (settings.toasts && mp.warn && mp.outMin !== undefined) {
-            $.ui.toast(paceWarning('5-hour limit', mp.outMin, hud.mpResetsInMin), { timeoutMs: 10000 })
-          }
-          if (settings.toasts && st.warn && st.outMin !== undefined) {
-            $.ui.toast(paceWarning('7-day limit', st.outMin, hud.stResetsInMin), { timeoutMs: 10000 })
-          }
-        }
-        $.ui.invalidate('ui.render')
+        // Read first, so a measurement pushed meanwhile is not overwritten with the gauges from before it.
+        const fresh = await usageOr($, t, undefined)
+        gauges = takeReading($, gauges, fresh, t, settings.toasts, turnsLeft(hps))
       }
       if (settings.minis && beat % AGENTS_EVERY_BEATS === 0) {
         minis = await minisOr($, t, minis)
@@ -258,9 +268,9 @@ export const register: Register = (on, options) => {
           color: lineColor(a.mode, body?.look.lineColors),
           line: statusLine(a.mode, a.since, t - a.since, a.target, body?.look.lines[a.mode]),
           cwd: shellCwd,
-          hp: hud?.hp,
-          mp: hud?.mp,
-          st: hud?.st,
+          hp: gauges.hud?.hp,
+          mp: gauges.hud?.mp,
+          st: gauges.hud?.st,
           turnStartedAt,
         }
         if (shellDue(shell, shellLast.key, shellLast.at, t)) {
@@ -317,6 +327,13 @@ export const register: Register = (on, options) => {
     }
 
     return result
+  })
+
+  // The engine pushes each new measurement; the tick's polling stays as the fallback.
+  on('session.measure', async ($, e, next) => {
+    const t = await $.clock.now()
+    gauges = takeReading($, gauges, hudFrom(e, t), t, settings.toasts, turnsLeft(hps))
+    return next(e)
   })
 
   // The main loop's turns only: a subagent's turn carries its `agentId`.
@@ -389,10 +406,11 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'clawd' }, async $ => {
     const t = await $.clock.now()
 
+    const hud = gauges.hud
     const forecast = {
       turns: turnsLeft(hps),
-      mpOutMin: stepLimit(mpPace, hud?.mp, hud?.mpResetsInMin, t, PACE_MIN_MS.mp).outMin,
-      stOutMin: stepLimit(stPace, hud?.st, hud?.stResetsInMin, t, PACE_MIN_MS.st).outMin,
+      mpOutMin: stepLimit(gauges.mpPace, hud?.mp, hud?.mpResetsInMin, t, PACE_MIN_MS.mp).outMin,
+      stOutMin: stepLimit(gauges.stPace, hud?.st, hud?.stResetsInMin, t, PACE_MIN_MS.st).outMin,
     }
 
     const today = readToday(await $.store.get(TODAY_KEY).catch(() => undefined), dayOf(t))
@@ -450,19 +468,40 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    const hud = gauges.hud
     if (!settings.hud || !hud || e.surface !== 'terminal') {
       return next(e)
     }
     if (!body) {
       body = await keptBody($)
     }
+    const forecast = { turns: turnsLeft(hps), mpOutMin: gauges.mpOutMin, stOutMin: gauges.stOutMin }
+    const { Box, Text } = $.ui.resolve(e)
+    if (settings.hudStyle === 'line') {
+      const parts = hudLine(hud, body.look.hud, forecast)
+      if (parts.length === 0) {
+        return next(e)
+      }
+
+      return (
+        <Box flexDirection="column">
+          {await next(e)}
+          <Box marginLeft={2} width={Math.max(24, bodyColumns - 3)}>
+            {parts.map((p, i) => (
+              <Text key={String(i)} color={p.color} bold={p.bold} wrap="truncate">
+                {p.text}
+              </Text>
+            ))}
+          </Box>
+        </Box>
+      )
+    }
     const width = Math.min(HUD_WINDOW_W, Math.max(24, bodyColumns - 2))
-    const rows = hudRows(hud, body.look.hud, barWidth(width))
+    const rows = hudRows(hud, body.look.hud, barWidth(width), forecast)
     if (rows.length === 0) {
       return next(e)
     }
-    const { Box, Text } = $.ui.resolve(e)
-    const edges = windowEdges(width, body.name)
+    const edges = windowEdges(width, body.name, hud.costUsd === undefined ? '' : fmtUsd(hud.costUsd))
     const frame = frameColor(body.look.hud)
 
     return (
@@ -514,7 +553,7 @@ export const register: Register = (on, options) => {
       const views = minisOnScreen(minis, now)
       // A leap is the run mode playing the jump clip, slowed, while the pet travels.
       const drawn = a.leap ? { mode: 'jump' as const, ms: leapClipMs((now - a.leap.since) * settings.pace) } : { mode: a.mode, ms: elapsed * settings.pace }
-      const picture = compose(body, drawn.mode, drawn.ms, a.dir, hud ? mood(hud) : 'ok', views)
+      const picture = compose(body, drawn.mode, drawn.ms, a.dir, gauges.hud ? mood(gauges.hud) : 'ok', views)
       const extra = views.length > MAX_MINIS ? ` (+${views.length - MAX_MINIS} minis)` : ''
       const turnMs = turnStartedAt === undefined ? undefined : now - turnStartedAt
       const line = settings.statusLine ? clocked(statusLine(a.mode, a.since, elapsed, a.target, body.look.lines[a.mode]), a.mode, turnMs, elapsed) + extra : ''

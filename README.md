@@ -157,6 +157,7 @@ Run `/plugin configure clawd-pet@clawd-pet` in a session.
 | Speed | `normal` | Animation and running speed: `slow`, `normal`, or `fast`. |
 | Sleep after (seconds) | `60` | Idle time before Clawd sleeps. `0` keeps it awake. |
 | HUD | on | The HP, MP, and ST window below the prompt. |
+| HUD style | `window` | `window`: the framed HUD with token counts, forecasts, and the session's cost. `line`: one unframed row, four rows shorter, for a small terminal. |
 | Status line | on | The text beside the pet. |
 | Name files and commands | on | Show the file, pattern, command, host, or query each tool works on. |
 | Subagent minis | on | One mini per running subagent behind the pet. |
@@ -170,7 +171,7 @@ Or from a shell, then restart Claude Code:
 echo '{"speed": "fast", "sleepAfter": "300"}' | claude plugin configure clawd-pet@clawd-pet --values-stdin
 ```
 
-The install may say "9 userConfig options not yet set". Every setting has a default, so nothing is needed.
+The install may say "10 userConfig options not yet set". Every setting has a default, so nothing is needed.
 
 ## Update
 

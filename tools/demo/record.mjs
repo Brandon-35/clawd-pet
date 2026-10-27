@@ -14,7 +14,7 @@ registerHooks({ resolve: (spec, ctx, next) => next(/^\.\.?\//.test(spec) && !/\.
 const plugin = new URL('../../plugins/clawd-pet/', import.meta.url)
 const hook = name => import(new URL(`hooks/${name}.ts`, plugin).href)
 const { TICK_MS, fail, leapClipMs, step } = await hook('anim')
-const { HUD_WINDOW_W, barWidth, frameColor, hudRows, mood, windowEdges } = await hook('hud')
+const { HUD_WINDOW_W, barWidth, fmtUsd, frameColor, hudRows, mood, windowEdges } = await hook('hud')
 const { minisOnScreen } = await hook('minis')
 const { animate, readTheme } = await hook('theme')
 const { BODY_W, HEIGHT, MAX_MINIS, compose, crop, encodeCells, trailWidth } = await hook('pixels')
@@ -58,7 +58,8 @@ const ANSWER = 'The settings page has a dark mode toggle, and the tests pass.'
 function hudAt(t) {
   const polled = Math.floor(t / 2000) * 2000
   const worked = Math.max(0, Math.min(polled, TURN[1]) - TURN[0]) / (TURN[1] - TURN[0])
-  return { hp: Math.round(100 - 22 * worked), mp: Math.round(92 - 4 * worked), mpResetsInMin: 219, st: 57, stResetsInMin: 4380 }
+  const hp = Math.round(100 - 22 * worked)
+  return { hp, tokens: (100 - hp) * 2000, window: 200000, costUsd: 0.38 + 0.86 * worked, mp: Math.round(92 - 4 * worked), mpResetsInMin: 219, st: 57, stResetsInMin: 4380 }
 }
 
 // ---- the screen, as register.tsx lays it out ----
@@ -133,7 +134,7 @@ function screen(t, a, body, layout) {
   ops.push({ kind: 'text', row: prompt + 3, col: 2, text: '⏵⏵ auto mode on (shift+tab to cycle)', color: '#6b7499' })
 
   const hudW = Math.min(HUD_WINDOW_W, Math.max(24, COLS - 2))
-  const edges = windowEdges(hudW, body.name)
+  const edges = windowEdges(hudW, body.name, fmtUsd(hud.costUsd))
   const frame = frameColor(body.look.hud)
   const rows = hudRows(hud, body.look.hud, barWidth(hudW))
   const top = prompt + 4

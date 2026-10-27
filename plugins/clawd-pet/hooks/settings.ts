@@ -3,6 +3,7 @@ export type Settings = {
   pace: number // 1 is normal; the pet runs and animates this many times as fast
   sleepAfterMs: number // 0 keeps the pet awake
   hud: boolean
+  hudStyle: 'window' | 'line' // the framed HUD, or one unframed row
   statusLine: boolean
   targets: boolean // the status line names files, patterns, commands, and hosts
   minis: boolean
@@ -13,7 +14,7 @@ export type Settings = {
 
 const PACE: Record<string, number> = { slow: 0.6, normal: 1, fast: 1.6 }
 
-export const DEFAULTS: Settings = { pace: 1, sleepAfterMs: 60000, hud: true, statusLine: true, targets: true, minis: true, toasts: true, notifyAfterMs: 120000, shellStatus: true }
+export const DEFAULTS: Settings = { pace: 1, sleepAfterMs: 60000, hud: true, hudStyle: 'window', statusLine: true, targets: true, minis: true, toasts: true, notifyAfterMs: 120000, shellStatus: true }
 
 const flag = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback)
 
@@ -29,6 +30,7 @@ export function readSettings(options: Readonly<Record<string, unknown>>): Settin
     pace: PACE[String(options.speed)] ?? DEFAULTS.pace,
     sleepAfterMs: typeof sleep === 'number' && Number.isFinite(sleep) && sleep >= 0 ? sleep * 1000 : DEFAULTS.sleepAfterMs,
     hud: flag(options.hud, DEFAULTS.hud),
+    hudStyle: options.hudStyle === 'line' ? 'line' : DEFAULTS.hudStyle,
     statusLine: flag(options.statusLine, DEFAULTS.statusLine),
     targets: flag(options.targets, DEFAULTS.targets),
     minis: flag(options.minis, DEFAULTS.minis),

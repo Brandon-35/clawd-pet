@@ -14,13 +14,15 @@ import { noteTurn, stepLimit, turnsLeft } from './pace'
 import type { LimitPace } from './pace'
 import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
+import { advisorHealth, advisorLine, advisorToast, countAdvisor, modelFamily } from './advisor'
+import type { AdvisorUse } from './advisor'
 import { previewPage } from './preview'
 import { newTurnChecks, noteCommand, noteEdit, untestedWarning } from './checks'
 import { forgetAll, forgetPath, noteRead, noteTokens, readKey, rereadWarning } from './reread'
 import type { Reads } from './reread'
 import { NOTE_MAX, NOTE_PREFIX, isNote, keepNotes, messageToast, noteText, noteToast, notesLine, unwrap } from './inbox'
 import type { Note } from './inbox'
-import { PEER_STALE_MS, findPeer, livePeers, parsePeerCommand, parseRecord, parseSend, peerEvents, peerSuggestions, peersLine, peersReport, sendReport, waitingPeers } from './peers'
+import { PEER_STALE_MS, findPeer, livePeers, parsePeerCommand, parseRecord, parseSend, peerEvents, peerSuggestions, peersLine, peersReport, sendReport, subcommandSuggestions, waitingPeers } from './peers'
 import type { Peer } from './peers'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
@@ -120,6 +122,16 @@ function themeReport(pet: Body, notes: string[]) {
   return `The mod made every clip and face from the sprite: ${made}.\n\nResting frame (@ is an eye, * a cheek):\n${restingFrame(pet)}${noted}`
 }
 
+/** The advisor model in the settings, or undefined when none is set or the read fails. */
+async function readAdvisor($: EngineInterface) {
+  try {
+    const v = await $.settings.read({ key: 'advisorModel' })
+    return typeof v === 'string' && v !== '' ? v : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Counts `add` into the day's work kept across sessions. Losing a count is better than failing the hook. */
 async function countToday($: EngineInterface, now: number, add: Parameters<typeof addToday>[2]) {
   try {
@@ -214,6 +226,11 @@ export const register: Register = (on, options) => {
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
   let layoutOf: Body | undefined
+  let advisorModel: string | undefined // the advisor setting, read at the session's and each turn's start
+  let mainModel: string | undefined // the model of the main loop's latest step
+  let sessionAdvisor: AdvisorUse = { calls: 0, ms: 0 }
+  let turnAdvisor: AdvisorUse = { calls: 0, ms: 0 } // the main loop's turn
+  const advisorTold = new Set<string>() // the (main, advisor) families an idle-advisor toast already named
 
   // The band leaves the last column free, so a full row never wraps.
   const bandWidth = () => Math.max(BODY_W, bodyColumns - 1)
@@ -238,6 +255,11 @@ export const register: Register = (on, options) => {
     reads = {}
     lastReadKey = ''
     lastPeers = undefined
+    advisorModel = await readAdvisor($)
+    mainModel = undefined
+    sessionAdvisor = { calls: 0, ms: 0 }
+    turnAdvisor = { calls: 0, ms: 0 }
+    advisorTold.clear()
     await countToday($, now, { sessions: 1 })
     if (settings.shellStatus || settings.peers) {
       try {
@@ -284,7 +306,7 @@ export const register: Register = (on, options) => {
     try {
       await $.command.register({
         name: 'clawd',
-        description: "Clawd's report on this session: turns, tool calls, failures, files edited, and what is left. /clawd peers lists your other live sessions; /clawd send <session> <message> messages one; /clawd note <session> <note> shows a note to the person there, never its model",
+        description: "Clawd's report on this session: turns, tool calls, failures, files edited, and what is left. /clawd peers lists your other live sessions; /clawd send <session> <message> messages one; /clawd note <session> <note> shows a note to the person there, never its model; /clawd advisor checks that the advisor runs",
         immediate: true,
       })
     } catch {
@@ -470,8 +492,30 @@ export const register: Register = (on, options) => {
       turnStartUsd = gauges.hud?.costUsd
       repeats = {}
       checks = newTurnChecks()
+      turnAdvisor = { calls: 0, ms: 0 }
+      advisorModel = await readAdvisor($)
     }
     return next(e)
+  })
+
+  // Observe-only: the step streams on unchanged. A subagent's steps carry its `agentId`.
+  on('turn.step', async function* ($, e, next) {
+    const r = yield* next(e)
+    if (e.agentId !== undefined) {
+      return r
+    }
+    mainModel = e.model
+    turnAdvisor = countAdvisor(turnAdvisor, r.serverToolUses)
+    sessionAdvisor = countAdvisor(sessionAdvisor, r.serverToolUses)
+    const pair = `${modelFamily(e.model)}|${modelFamily(advisorModel)}`
+    if (!advisorTold.has(pair)) {
+      advisorTold.add(pair)
+      const toast = settings.toasts ? advisorToast(e.model, advisorModel) : undefined
+      if (toast) {
+        $.ui.toast(toast, { timeoutMs: 10000 })
+      }
+    }
+    return r
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -490,7 +534,7 @@ export const register: Register = (on, options) => {
       }
       stats = countTurn(stats, e.durationMs, usd)
       await countToday($, await $.clock.now(), { turns: 1, workMs: e.durationMs, calls: callCount(stats) - callCount(turnStats), usd })
-      const recap = settings.toasts ? turnRecap(turnStats, stats, e.durationMs, e.reason, usd) : undefined
+      const recap = settings.toasts ? turnRecap(turnStats, stats, e.durationMs, e.reason, usd, turnAdvisor) : undefined
       if (recap) {
         $.ui.toast(recap, { timeoutMs: 8000 })
       }
@@ -503,7 +547,7 @@ export const register: Register = (on, options) => {
       }
       if (settings.notifyAfterMs > 0 && e.durationMs >= settings.notifyAfterMs && e.reason !== 'aborted') {
         // The recap is never empty past 30 s, and a notification that cannot be sent is not worth a fault.
-        $.ui.notify(turnRecap(turnStats, stats, e.durationMs, e.reason, usd) ?? 'the turn ended', { title: 'Claude Code' }).catch(() => undefined)
+        $.ui.notify(turnRecap(turnStats, stats, e.durationMs, e.reason, usd, turnAdvisor) ?? 'the turn ended', { title: 'Claude Code' }).catch(() => undefined)
       }
       const t = await $.clock.now()
       await update($, anim, a => ended(a, e.reason, t))
@@ -583,6 +627,10 @@ export const register: Register = (on, options) => {
   on('prompt.autocomplete', async ($, e, next) => {
     const rows = await next(e)
     const before = e.text.slice(0, e.start)
+    const subcommands = subcommandSuggestions(before, e.token)
+    if (subcommands.length > 0) {
+      return { suggestions: [...rows.suggestions, ...subcommands] }
+    }
     if (!settings.peers || !home || !/^\s*\/clawd\s+(send|note)\s+$/.test(before)) {
       return rows
     }
@@ -645,6 +693,17 @@ export const register: Register = (on, options) => {
 
       return { text: sendReport(name, result) }
     }
+    if (e.args.trim() === 'advisor') {
+      advisorModel = await readAdvisor($)
+      const health = advisorHealth(mainModel, advisorModel)
+      const pairing = `main ${mainModel ?? 'not seen yet'} · advisor ${advisorModel ?? 'none'}`
+      if (!health.fix) {
+        return { text: `${pairing}\n${health.text}` }
+      }
+      const filled = await $.prompt.fill({ text: health.fix }).catch(() => ({ isFilled: false }))
+
+      return { text: `${pairing}\n${health.text}\n${filled.isFilled ? 'press Enter to apply' : 'run'}: ${health.fix}` }
+    }
     const peers = settings.peers && home ? await readPeers($, `${home}/${SHELL_DIR}`, t, selfId) : []
     if (e.args.trim() === 'peers') {
       return { text: settings.peers ? peersReport(peers, t, home) : 'The Peer board setting is off, so other sessions are not read.' }
@@ -668,7 +727,7 @@ export const register: Register = (on, options) => {
     }
 
     return {
-      text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today), peersLine(peers), ...contextLines(breakdown), notesLine(notes, t)]
+      text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today), advisorLine(mainModel, advisorModel, sessionAdvisor), peersLine(peers), ...contextLines(breakdown), notesLine(notes, t)]
         .filter(s => s !== '')
         .join('\n'),
     }

@@ -452,3 +452,57 @@ test('another session finishing a long turn or starting to wait toasts here, and
   await clock.advance(10000)
   expect(peerToasts().length).toBe(2)
 })
+
+test('an advisor that never runs under the main model toasts once, counts in the recap and the report, and /clawd advisor fills the fix', async ($, on) => {
+  const toasts: string[] = []
+  stubEngine(on, toasts)
+  const filled: string[] = []
+  on('settings.read', () => ({ value: { advisorModel: 'opus' } }))
+  on('prompt.fill', (_$, e) => {
+    filled.push(e.text)
+    return { isFilled: true }
+  })
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  on('turn.step', async function* (_$, e) {
+    return {
+      turnId: e.turnId,
+      index: e.index,
+      answer: '',
+      toolUses: [],
+      stopReason: 'end_turn' as const,
+      usage: null,
+      serverToolUses: e.agentId === undefined ? [{ id: 'a', name: 'advisor', input: {}, startedAt: 1000, endedAt: 15_000 }] : undefined,
+    }
+  })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  const stepOnce = async (model: string, agentId?: string) => {
+    const s = $.turn.step({ turnId: 't1', index: 0, model, messageCount: 1, ...(agentId !== undefined && { agentId }) })
+    let chunk = await s.next()
+    while (!chunk.done) {
+      chunk = await s.next()
+    }
+    return chunk.value
+  }
+
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  const r = await stepOnce('claude-fable-5-1')
+  expect(r.stopReason).toBe('end_turn')
+  await stepOnce('claude-fable-5-1')
+  await stepOnce('claude-fable-5-1', 'sub1')
+  expect(toasts.filter(t => t.includes('advisor'))).toEqual(['✻ advisor opus never runs under fable · /clawd advisor'])
+  await $.turn.complete({ answer: '', durationMs: 45_000, isAborted: false, turnId: 't1', reason: 'answer' })
+  expect(toasts.at(-1)).toBe('done in 45s · advisor ×2 (28s)')
+
+  const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect((await run('')).text).toContain('- advisor: opus is not stronger than fable, so it never runs · fix: /model sonnet · 2 calls, 28s this session')
+  expect((await run('advisor')).text).toBe(
+    'main claude-fable-5-1 · advisor opus\nadvisor opus is not stronger than fable, so it never runs · fix: /model sonnet\npress Enter to apply: /model sonnet',
+  )
+  expect(filled).toEqual(['/model sonnet'])
+
+  await stepOnce('claude-sonnet-5-5')
+  expect((await run('advisor')).text).toBe('main claude-sonnet-5-5 · advisor opus\nadvisor opus · active')
+  expect(filled.length).toBe(1)
+  expect(toasts.filter(t => t.includes('never runs')).length).toBe(1)
+})

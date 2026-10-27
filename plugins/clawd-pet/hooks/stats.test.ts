@@ -51,6 +51,12 @@ test('a long turn ends with a recap of what it did; a short or stopped one ends 
   expect(turnRecap(start, end, 134_000, 'aborted')).toBeUndefined()
 })
 
+test('a long turn that called the advisor names its calls and their time in the recap', () => {
+  const s = newStats(0)
+  expect(turnRecap(s, s, 45_000, 'answer', 0.42, { calls: 2, ms: 14_000 })).toBe('done in 45s · $0.42 · advisor ×2 (14s)')
+  expect(turnRecap(s, s, 45_000, 'answer', undefined, { calls: 0, ms: 0 })).toBe('done in 45s')
+})
+
 test('three failed calls in a row warn, a success starts the count over', () => {
   const fails = (s: ReturnType<typeof newStats>, n: number) => Array.from({ length: n }).reduce<ReturnType<typeof newStats>>(acc => countCall(acc, 'bash', '', true), s)
   expect(streakWarning(fails(newStats(0), 2))).toBeUndefined()

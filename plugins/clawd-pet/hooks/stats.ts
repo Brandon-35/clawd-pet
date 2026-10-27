@@ -1,3 +1,5 @@
+import { advisorCalls } from './advisor'
+import type { AdvisorUse } from './advisor'
 import { aboutTurns, fmtMin, fmtTokens, fmtUsd } from './hud'
 import type { Forecast, Hud } from './hud'
 import { fmtDuration } from './status'
@@ -102,10 +104,10 @@ const RECAP_AFTER_MS = 30000 // a shorter turn ends while the user still watches
 
 /**
  * The toast for a main-loop turn that ended for `reason` after `durationMs`, from the counts at its start and its
- * end: what it did, or that it failed, and what it cost when `costUsd` is a cent or more. Undefined for a short turn
- * and for one the user stopped.
+ * end: what it did, or that it failed, what it cost when `costUsd` is a cent or more, and the advisor's calls in
+ * `advisor`. Undefined for a short turn and for one the user stopped.
  */
-export function turnRecap(start: Stats, end: Stats, durationMs: number, reason: 'answer' | 'aborted' | 'refusal' | 'error', costUsd?: number) {
+export function turnRecap(start: Stats, end: Stats, durationMs: number, reason: 'answer' | 'aborted' | 'refusal' | 'error', costUsd?: number, advisor?: AdvisorUse) {
   if (durationMs < RECAP_AFTER_MS || reason === 'aborted') {
     return undefined
   }
@@ -117,6 +119,7 @@ export function turnRecap(start: Stats, end: Stats, durationMs: number, reason: 
     ...(files > 0 ? [`${plural(files, 'file')} edited`] : []),
     ...(failed > 0 ? [`${failed} failed`] : []),
     ...(spent(costUsd) ? [spent(costUsd)] : []),
+    ...(advisor && advisor.calls > 0 ? [`advisor ${advisorCalls(advisor)}`] : []),
   ]
   const head = reason === 'answer' ? `done in ${fmtDuration(durationMs)}` : `the turn ended in ${reason === 'error' ? 'an error' : 'a refusal'} after ${fmtDuration(durationMs)}`
 

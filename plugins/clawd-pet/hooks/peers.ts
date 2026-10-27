@@ -195,3 +195,20 @@ export function peerSuggestions(before: string, token: string, list: Peer[], now
       description: [shortPath(p.cwd, home), p.mode === 'alert' ? 'needs you' : p.mode, p.turnStartedAt === undefined ? '' : fmtDuration(now - p.turnStartedAt)].filter(s => s !== '').join(' · '),
     }))
 }
+
+const SUBCOMMANDS = [
+  { name: 'peers', description: 'list your other live sessions' },
+  { name: 'send', description: 'message another session: /clawd send <session> <message>' },
+  { name: 'note', description: 'show a note to the person in another session, never its model' },
+  { name: 'advisor', description: 'check that the advisor runs under the main model, and fill the fix' },
+]
+
+/** The typeahead rows for the word after `/clawd`: the subcommands that start with `token`. */
+export function subcommandSuggestions(before: string, token: string) {
+  if (!/^\s*\/clawd\s+$/.test(before)) {
+    return []
+  }
+  const q = token.toLowerCase()
+
+  return SUBCOMMANDS.filter(c => c.name.startsWith(q)).map(c => ({ text: `${c.name} `, label: c.name, description: c.description }))
+}

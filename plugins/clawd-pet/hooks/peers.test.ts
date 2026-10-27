@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { findPeer, peerSuggestions, shortPath, livePeers, namePeers, parsePeerCommand, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
+import { findPeer, peerSuggestions, subcommandSuggestions, shortPath, livePeers, namePeers, parsePeerCommand, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
 import type { Peer } from './peers'
 import { shellRecord } from './shell'
 
@@ -143,4 +143,12 @@ test('peerSuggestions offers the peers for the peer word of send and note, with 
   expect(peerSuggestions('/clawd note ', 'w/a', list, 0, '/home/u').map(r => r.label)).toEqual(['api'])
   expect(peerSuggestions('/clawd peers ', '#', list, 0)).toEqual([])
   expect(peerSuggestions('/clawd send api ', '#', list, 0)).toEqual([])
+})
+
+test('subcommandSuggestions offers the /clawd subcommands that start with the word typed', () => {
+  expect(subcommandSuggestions('/clawd ', 'a').map(r => r.text)).toEqual(['advisor '])
+  expect(subcommandSuggestions('/clawd ', 'P')[0]).toEqual({ text: 'peers ', label: 'peers', description: 'list your other live sessions' })
+  expect(subcommandSuggestions('/clawd ', 'x')).toEqual([])
+  expect(subcommandSuggestions('/clawd send ', 'a')).toEqual([])
+  expect(subcommandSuggestions('/model ', 'a')).toEqual([])
 })

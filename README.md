@@ -60,12 +60,16 @@ Clawd speaks up in a toast when something needs your eyes:
 
 | When | Toast |
 | --- | --- |
-| A turn of 30 seconds or more ends | `done in 2m 14s · 18 tool calls · 3 files edited · 1 failed`, or that it ended in an error |
+| A turn of 30 seconds or more ends | `done in 2m 14s · 18 tool calls · 3 files edited · 1 failed · $0.42`, or that it ended in an error |
 | Three tool calls fail in a row (and every three after) | `3 tool calls failed in a row. Press Esc to step in if Claude is stuck.` |
-| The same command, file read, search, or fetch runs a third time with no edit between | `` `$ npm test` ran 3 times with no edit between. Claude may be going in circles. `` |
+| The same command, search, or fetch runs a third time with no edit between | `` `$ npm test` ran 3 times with no edit between. Claude may be going in circles. `` |
 | Context left falls to 20 %, then to 10 % | `context 18% left (about 3 turns at this pace): run /compact at a good stopping point` |
 | The 5-hour or 7-day limit falls to 10 % | `5-hour limit 8% left, resets in 1h12m` |
 | A limit's pace will run it out before it resets | `at this pace the 5-hour limit runs out in about 40m, before it resets in 2h10m` |
+| One tool result adds 10k tokens or more to the context | `Read big.log added ~14k tokens to the context; Read with offset/limit or Grep to take less` |
+| A file is read again, unchanged on disk and still in context | `app.ts is already in context, unchanged since it was read 3 turns ago (~4.2k tokens)` |
+| A compaction ends | `compacted 152k → 31k tokens, freed 121k (HP 24% → 84%)` |
+| A turn edits two or more code files and runs no test, type check, lint or build | `edited 3 code files this turn and ran no tests or checks` |
 
 Each gauge warns once on the way down, and again only if it climbs back first. The pace warning needs 15 minutes of readings for the 5-hour limit and 2 hours for the 7-day one, and warns once per window. An edit between two identical calls starts their count over, so running the tests after each fix does not warn. A turn you stop yourself ends quietly. The **Toasts** setting turns all of these off.
 
@@ -80,10 +84,15 @@ report on this session, 1h 02m in:
 - 7 failed (4%)
 - 12 files edited
 - context 64% left (about 9 turns at this pace) · 5-hour limit 80% left, resets in 2h10m
-- today, in every session: 3 sessions, 41 turns, 1h 52m of work, 520 tool calls
+- cost: $4.10 this session, $0.42 last turn
+- compactions: 1, freed ~121k tokens
+- heaviest results: Read big.log ~14k · Bash npm test ~11k
+- today, in every session: 3 sessions, 41 turns, 1h 52m of work, 520 tool calls, $9.80 spent
+- context: messages 98k · system tools 22k · MCP tools 14k · memory files 8k
+- biggest MCP servers: github ~9k · figma ~4k
 ```
 
-A failed call is one that ran and returned an error; a call you deny does not count. The session counts start over with each session; the last line adds up the whole local day across sessions. The context forecast follows the last few turns and starts over after a compaction; a limit runs out "at this pace" only when that comes before its reset.
+The last lines say what fills the context window, so you know what to trim: they come from Claude Code's local estimate, which sends no request. A line shows only when it has something to say. A failed call is one that ran and returned an error; a call you deny does not count. The session counts start over with each session; the last line adds up the whole local day across sessions. The context forecast follows the last few turns and starts over after a compaction; a limit runs out "at this pace" only when that comes before its reset.
 
 Run `/clawd peers` for your other live Claude Code sessions on this machine, the ones waiting on you first:
 
@@ -113,16 +122,22 @@ A message another session sends here, which this model will read, toasts with it
 A rounded window under the prompt, titled with the pet's name:
 
 ```text
-╭─ clawd ────────────────────────────────────╮
-│ HP ━━━━━━━━━━━━━━━━━━━━ 100%               │
-│ MP ━━━━━━━━━━━━━━━━━───  84%  ↻ 3h46m      │
-│ ST ━━━━━━━━━━━━━━━━━━╸─  92%  ↻ 6d12h      │
-╰────────────────────────────────────────────╯
+╭─ clawd ─────────────────────────── ✻ 1 waiting · $4.10 ─╮
+│ HP ━━━━━━━━━━━━━╸──────  64%  72k/200k · ~9 turns       │
+│ MP ━━━━╸───────────────  22%  ↻ 2h10m · ⚠ out 40m       │
+│ ST ━━━━━━━━━━━━━━━━━━╸─  92%  ↻ 6d12h                   │
+╰─────────────────────────────────────────────────────────╯
 ```
 
-- **HP** is how much of the context window is left. The bar goes amber at 50 % and red at 25 %; under 10 % it suggests `/compact`.
-- **MP** is what's left of the 5-hour rate limit, and `↻` is the time until it resets.
+- **HP** is how much of the context window is left, with the tokens used and the turns it holds at the recent pace. The bar goes amber at 50 % and red at 25 %; under 10 % it suggests `/compact`.
+- **MP** is what's left of the 5-hour rate limit, and `↻` is the time until it resets. `⚠ out` in amber says when it runs out at this pace, shown only when that comes first.
 - **ST** is the same for the 7-day limit.
+
+The top edge carries the session's cost and how many of your other sessions wait on you. Readings arrive as Claude Code measures the session. Set **HUD style** to `line` for one unframed row instead, which saves four rows:
+
+```text
+HP ━━━━━─── 64% · MP ━━────── 22% ↻2h10m ⚠40m · ST ━━━━━━━╸ 92% · $4.10
+```
 
 Bars fill in half cells and shrink on a narrow terminal. MP and ST go red under 15 %, and appear on Pro and Max plans once a response has reported the limit.
 
@@ -216,7 +231,10 @@ A mod runs inside Claude Code with your permissions. clawd-pet:
 
 - reads its own theme, polls session usage and the subagent list, and draws;
 - registers the `/clawd` command, which prints counts it keeps in memory for the session;
-- keeps the day's totals (sessions, turns, time worked, tool calls) in its own store, as numbers only;
+- keeps the day's totals (sessions, turns, time worked, tool calls, compactions, spend) in its own store, as numbers only;
+- reads each tool result's size as it enters the conversation, to warn about heavy ones, and never changes it; the size, tool and target are kept in memory for the report;
+- checks a file's modified time when Claude reads it again, to tell an unchanged re-read; the paths it remembers live in memory until the next edit or compaction;
+- asks Claude Code for its local context estimate when you run `/clawd`, which sends no request;
 - sends a desktop notification through Claude Code when a long turn ends, if **Notify after** is not `0`;
 - registers three tools for themes: `get_theme` returns the current theme, `preview_theme` writes a preview page to the path Claude gives it, and `set_theme` stores a theme in the mod's own store;
 - writes one small file per session to `~/.cache/clawd-pet/sessions/` for the zsh prompt, unless **Shell status** is off: the mode, line color, status line, session folder, HP, MP, ST, and timestamps;

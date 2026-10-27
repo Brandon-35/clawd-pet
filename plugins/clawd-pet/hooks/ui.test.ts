@@ -196,3 +196,24 @@ test('a heavy tool result toasts once and lands in the report, and the row goes 
   const report = await $.command.run({ command: 'clawd', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
   expect(report.text).toContain('- heaviest results: Read big.log ~14k')
 })
+
+test('a compaction toasts the tokens it freed, counts in the report, and its result goes on unchanged', async ($, on) => {
+  const toasts: string[] = []
+  stubEngine(on, toasts)
+  const messages = [{ role: 'user' as const, text: 'the plan so far', toolUses: [] }]
+  const done = { messages, tokensBefore: 152000, tokensAfter: 31000 }
+  on('session.compact', () => done)
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+
+  const r = await $.session.compact({ trigger: 'manual', messages })
+  expect(r).toEqual(done)
+  expect(toasts).toEqual(['compacted 152k → 31k tokens, freed 121k (HP 24% → 84%)'])
+
+  await $.session.compact({ trigger: 'auto', messages, agentId: 'a1' })
+  await $.session.compact({ trigger: 'precompute', messages })
+  expect(toasts.length).toBe(1)
+
+  const report = await $.command.run({ command: 'clawd', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(report.text).toContain('- compactions: 1, freed ~121k tokens')
+  expect(report.text).toContain('1 compaction')
+})

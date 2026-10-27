@@ -1,7 +1,7 @@
 import { fmtDuration } from './status'
 
 /** The day's work across every session on this machine, as `/clawd` reports it; kept in `$.store`. */
-export type Today = { day: string; sessions: number; turns: number; workMs: number; calls: number }
+export type Today = { day: string; sessions: number; turns: number; workMs: number; calls: number; compactions: number }
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const count = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0)
@@ -18,7 +18,7 @@ export function readToday(v: unknown, day: string): Today {
   const o = typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {}
   const same = o.day === day
 
-  return { day, sessions: same ? count(o.sessions) : 0, turns: same ? count(o.turns) : 0, workMs: same ? count(o.workMs) : 0, calls: same ? count(o.calls) : 0 }
+  return { day, sessions: same ? count(o.sessions) : 0, turns: same ? count(o.turns) : 0, workMs: same ? count(o.workMs) : 0, calls: same ? count(o.calls) : 0, compactions: same ? count(o.compactions) : 0 }
 }
 
 /** The kept value `v` with `add` counted in on the day of `now`. A new day starts from zero. */
@@ -31,6 +31,7 @@ export function addToday(v: unknown, now: number, add: Partial<Omit<Today, 'day'
     turns: t.turns + (add.turns ?? 0),
     workMs: t.workMs + (add.workMs ?? 0),
     calls: t.calls + (add.calls ?? 0),
+    compactions: t.compactions + (add.compactions ?? 0),
   }
 }
 
@@ -38,4 +39,4 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 
 /** The report's line for the day. */
 export const todayLine = (t: Today) =>
-  `- today, in every session: ${plural(t.sessions, 'session')}, ${plural(t.turns, 'turn')}, ${fmtDuration(t.workMs)} of work, ${plural(t.calls, 'tool call')}`
+  `- today, in every session: ${plural(t.sessions, 'session')}, ${plural(t.turns, 'turn')}, ${fmtDuration(t.workMs)} of work, ${plural(t.calls, 'tool call')}${t.compactions > 0 ? `, ${plural(t.compactions, 'compaction')}` : ''}`

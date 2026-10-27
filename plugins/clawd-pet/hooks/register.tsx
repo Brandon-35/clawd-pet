@@ -20,7 +20,8 @@ import type { Reads } from './reread'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
 import type { ShellState } from './shell'
-import { callCount, countCall, countReread, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
+import { callCount, countCall, countCompaction, countReread, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
+import { compactLine } from './compact'
 import { addToday, dayOf, readToday, todayLine } from './today'
 import { BODY_W, FACES, HEIGHT, MAX_MINIS, compose, crop, encodeCells, encodeSvg, trailWidth } from './pixels'
 import type { Body } from './pixels'
@@ -456,7 +457,19 @@ export const register: Register = (on, options) => {
     }
     compacting = true
     try {
-      return await next(e)
+      const r = await next(e)
+      if (e.trigger !== 'precompute' && r.skip === undefined) {
+        const line = compactLine(r.tokensBefore, r.tokensAfter, e.trigger, gauges.hud?.window)
+        if (line) {
+          stats = countCompaction(stats, (r.tokensBefore ?? 0) - (r.tokensAfter ?? 0))
+          if (settings.toasts) {
+            $.ui.toast(line, { timeoutMs: 10000 })
+          }
+          // Losing the day's count is better than losing the compaction's result.
+          await countToday($, await $.clock.now().catch(() => Date.now()), { compactions: 1 })
+        }
+      }
+      return r
     } finally {
       compacting = false
       // The earlier reads are summarized away, so reading them again is fair.

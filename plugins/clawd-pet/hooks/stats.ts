@@ -1,4 +1,4 @@
-import { aboutTurns, fmtMin } from './hud'
+import { aboutTurns, fmtMin, fmtTokens } from './hud'
 import type { Forecast, Hud } from './hud'
 import { fmtDuration } from './status'
 import type { ToolMode } from './status'
@@ -16,6 +16,8 @@ export type Stats = {
   files: string[] // each file an edit touched, once
   streak?: number // failed tool calls in a row, up to now
   rereads?: number // reads of a file the context already held unchanged
+  compactions?: number // compactions of the main conversation
+  freed?: number // tokens those compactions freed, summed
 }
 
 export const newStats = (since: number): Stats => ({ since, turns: 0, workMs: 0, calls: {}, failed: 0, files: [] })
@@ -38,6 +40,9 @@ export const countTurn = (s: Stats, durationMs: number): Stats => ({ ...s, turns
 
 /** `s` after one read of something the context already held. */
 export const countReread = (s: Stats): Stats => ({ ...s, rereads: (s.rereads ?? 0) + 1 })
+
+/** `s` after a compaction that freed `freed` tokens. */
+export const countCompaction = (s: Stats, freed: number): Stats => ({ ...s, compactions: (s.compactions ?? 0) + 1, freed: (s.freed ?? 0) + Math.max(0, freed) })
 
 /** All the tool calls `s` counted. */
 export const callCount = (s: Stats) => MODE_ORDER.reduce((n, m) => n + (s.calls[m] ?? 0), 0)
@@ -62,6 +67,7 @@ export function statsReport(s: Stats, now: number, hud?: Hud, forecast: Forecast
     `- ${s.failed} failed${share}`,
     `- ${plural(s.files.length, 'file')} edited`,
     ...((s.rereads ?? 0) > 0 ? [`- re-reads: ${s.rereads}`] : []),
+    ...((s.compactions ?? 0) > 0 ? [`- compactions: ${s.compactions}, freed ~${fmtTokens(s.freed ?? 0)} tokens`] : []),
     ...(gauges.length > 0 ? [`- ${gauges.join(' · ')}`] : []),
   ].join('\n')
 }

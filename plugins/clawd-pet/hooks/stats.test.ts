@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { countCall, countReread, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
+import { countCall, countCompaction, countReread, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
 
 test('tool calls count by kind, failures add up, and each edited file counts once', () => {
   let s = newStats(0)
@@ -64,4 +64,9 @@ test('three failed calls in a row warn, a success starts the count over', () => 
 test('the report counts re-reads only when there were some', () => {
   expect(statsReport(newStats(0), 0)).not.toContain('re-reads')
   expect(statsReport(countReread(countReread(newStats(0))), 0).split('\n').pop()).toBe('- re-reads: 2')
+})
+
+test('the report counts compactions and the tokens they freed only when there were some', () => {
+  expect(statsReport(newStats(0), 0)).not.toContain('compactions')
+  expect(statsReport(countCompaction(countCompaction(newStats(0), 121000), 119000), 0).split('\n').pop()).toBe('- compactions: 2, freed ~240k tokens')
 })

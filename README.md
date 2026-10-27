@@ -60,7 +60,7 @@ Clawd speaks up in a toast when something needs your eyes:
 
 | When | Toast |
 | --- | --- |
-| A turn of 30 seconds or more ends | `done in 2m 14s · 18 tool calls · 3 files edited · 1 failed · $0.42`, or that it ended in an error |
+| A turn of 30 seconds or more ends | `done in 2m 14s · 18 tool calls · 3 files edited · 1 failed · $0.42 · advisor ×2 (14s)`, or that it ended in an error |
 | Three tool calls fail in a row (and every three after) | `3 tool calls failed in a row. Press Esc to step in if Claude is stuck.` |
 | The same command, search, or fetch runs a third time with no edit between | `` `$ npm test` ran 3 times with no edit between. Claude may be going in circles. `` |
 | Context left falls to 20 %, then to 10 % | `context 18% left (about 3 turns at this pace): run /compact at a good stopping point` |
@@ -70,6 +70,10 @@ Clawd speaks up in a toast when something needs your eyes:
 | A file is read again, unchanged on disk and still in context | `app.ts is already in context, unchanged since it was read 3 turns ago (~4.2k tokens)` |
 | A compaction ends | `compacted 152k → 31k tokens, freed 121k (HP 24% → 84%)` |
 | A turn edits two or more code files and runs no test, type check, lint or build | `edited 3 code files this turn and ran no tests or checks` |
+| The advisor model is not stronger than the main model, so Claude Code never calls it | `✻ advisor opus never runs under fable · /clawd advisor` |
+| A later step writes 20k tokens or more to the prompt cache and reads less back | `❄ prompt cache went cold: 57k tokens re-cached` |
+| A reply stops at its token limit, is refused, or fills the context window | `✂ the reply hit max_tokens and was cut` |
+| Another model family answers than the one asked for | `↯ answered by sonnet, not opus` |
 
 Each gauge warns once on the way down, and again only if it climbs back first. The pace warning needs 15 minutes of readings for the 5-hour limit and 2 hours for the 7-day one, and warns once per window. An edit between two identical calls starts their count over, so running the tests after each fix does not warn. A turn you stop yourself ends quietly. The **Toasts** setting turns all of these off.
 
@@ -85,12 +89,16 @@ report on this session, 1h 02m in:
 - 12 files edited
 - context 64% left (about 9 turns at this pace) · 5-hour limit 80% left, resets in 2h10m
 - cost: $4.10 this session, $0.42 last turn
+- advisor: opus · active · 3 calls, 41s this session
+- cache: 94% of input read from cache
 - compactions: 1, freed ~121k tokens
 - heaviest results: Read big.log ~14k · Bash npm test ~11k
 - today, in every session: 3 sessions, 41 turns, 1h 52m of work, 520 tool calls, $9.80 spent
 - context: messages 98k · system tools 22k · MCP tools 14k · memory files 8k
 - biggest MCP servers: github ~9k · figma ~4k
 ```
+
+Run `/clawd advisor` to check the pairing of main model and advisor. When the advisor can never run, it names the fix and puts it in the prompt box, `/model sonnet` or `/advisor opus`, so one Enter applies it. Type `/clawd ` and a letter to pick a subcommand from the typeahead.
 
 The last lines say what fills the context window, so you know what to trim: they come from Claude Code's local estimate, which sends no request. A line shows only when it has something to say. A failed call is one that ran and returned an error; a call you deny does not count. The session counts start over with each session; the last line adds up the whole local day across sessions. The context forecast follows the last few turns and starts over after a compaction; a limit runs out "at this pace" only when that comes before its reset.
 
@@ -235,6 +243,7 @@ A mod runs inside Claude Code with your permissions. clawd-pet:
 - reads each tool result's size as it enters the conversation, to warn about heavy ones, and never changes it; the size, tool and target are kept in memory for the report;
 - checks a file's modified time when Claude reads it again, to tell an unchanged re-read; the paths it remembers live in memory until the next edit or compaction;
 - asks Claude Code for its local context estimate when you run `/clawd`, which sends no request;
+- reads each model response's model, stop reason, token counts and advisor calls as it arrives, and never changes the request or the response; it reads the `advisorModel` setting when a turn starts, and only fills the prompt box for `/clawd advisor`, never sends it;
 - sends a desktop notification through Claude Code when a long turn ends, if **Notify after** is not `0`;
 - registers three tools for themes: `get_theme` returns the current theme, `preview_theme` writes a preview page to the path Claude gives it, and `set_theme` stores a theme in the mod's own store;
 - writes one small file per session to `~/.cache/clawd-pet/sessions/` for the zsh prompt, unless **Shell status** is off: the mode, line color, status line, session folder, HP, MP, ST, and timestamps;

@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Anim, Mode } from '../types'
-import { TICK_MS, ended, fail, leapClipMs, step } from './anim'
+import { TICK_MS, ended, fail, leapClipMs, needsUser, step } from './anim'
 import { HUD_WINDOW_W, barWidth, frameColor, gaugeWarnings, hudFrom, hudRows, mood, paceWarning, windowEdges } from './hud'
 import type { Hud } from './hud'
 import { callKey, loopWarning, repeat } from './loops'
@@ -327,7 +327,7 @@ export const register: Register = (on, options) => {
 
   // Only the flag changes here: the pet reads only that a notification came, never its text.
   on('classic.Notification', async ($, e, next) => {
-    alert = true
+    alert = alert || needsUser(e.notification_type)
     return next(e)
   })
 

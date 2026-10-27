@@ -165,6 +165,12 @@ export function ended(a: Anim, reason: 'answer' | 'aborted' | 'refusal' | 'error
   return reason === 'answer' || a.mode === 'error' ? a : { ...a, mode: 'error', since: t }
 }
 
+/**
+ * Whether a notification of `type` waits on the user. A plugin's own notification (this mod's long-turn notice, for
+ * one) reports news and needs nothing.
+ */
+export const needsUser = (type: unknown) => type !== 'plugin_notification'
+
 /** The pet after a failed tool call: an error face, unless it is cheering. */
 export function fail(a: Anim, t: number): Anim {
   return a.mode === 'cheer' ? a : { ...a, mode: 'error', since: t }

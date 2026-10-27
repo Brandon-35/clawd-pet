@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Anim } from '../types'
-import { LEAP_MS, ended, fail, step } from './anim'
+import { LEAP_MS, ended, fail, needsUser, step } from './anim'
 import type { Activity } from './anim'
 
 const resting: Anim = { mode: 'idle', since: 0, x: 0, dir: 1, tick: 0, target: '', working: false }
@@ -133,4 +133,11 @@ test('the pet packs up while a compaction runs, then settles back', () => {
   expect([packing.mode, packing.since]).toEqual(['compact', 1000])
   expect(step(packing, { ...quiet, compacting: true }, 60000).mode).toBe('compact')
   expect(step(packing, quiet, 60100).mode).toBe('idle')
+})
+
+test('a plugin notification does not call for the user, every other kind does', () => {
+  expect(needsUser('plugin_notification')).toBe(false)
+  expect(needsUser('permission_prompt')).toBe(true)
+  expect(needsUser('idle_prompt')).toBe(true)
+  expect(needsUser(undefined)).toBe(true)
 })

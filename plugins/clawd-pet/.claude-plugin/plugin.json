@@ -74,6 +74,12 @@
       "default": 120,
       "min": 0,
       "max": 3600
+    },
+    "shellStatus": {
+      "type": "boolean",
+      "title": "Shell status",
+      "description": "Write what each session is doing to ~/.cache/clawd-pet, for the clawd-pet zsh plugin to show in your prompt.",
+      "default": true
     }
   }
 }

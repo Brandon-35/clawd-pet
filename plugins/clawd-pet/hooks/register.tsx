@@ -14,6 +14,8 @@ import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
 import { previewPage } from './preview'
 import { readSettings } from './settings'
+import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
+import type { ShellState } from './shell'
 import { callCount, countCall, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
 import { addToday, dayOf, readToday, todayLine } from './today'
 import { BODY_W, FACES, HEIGHT, MAX_MINIS, compose, crop, encodeCells, encodeSvg, trailWidth } from './pixels'
@@ -130,6 +132,9 @@ export const register: Register = (on, options) => {
   let repeats: Repeats = {}
   let hps: number[] = [] // the context left at the end of recent turns
   let mpPace: LimitPace = {}
+  let shellPath: string | undefined // this session's record for the zsh plugin, once its home and id are known
+  let shellCwd = ''
+  let shellLast = { key: '', at: 0 }
   let stPace: LimitPace = {}
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
@@ -155,6 +160,15 @@ export const register: Register = (on, options) => {
     hud = await usageOr($, now, undefined)
     stats = newStats(now)
     await countToday($, now, { sessions: 1 })
+    if (settings.shellStatus) {
+      try {
+        const home = await $.env.get('HOME')
+        shellCwd = await $.session.root()
+        shellPath = home ? `${home}/${SHELL_DIR}/${await $.session.id()}.tsv` : undefined
+      } catch {
+        shellPath = undefined
+      }
+    }
     try {
       await $.tool.register({
         name: 'preview_theme',
@@ -236,6 +250,27 @@ export const register: Register = (on, options) => {
         const slowBeat = minis.length > 0 ? undefined : SLOW_BEATS[moved.mode]
         return slowBeat !== undefined && moved.mode === a.mode && beat % slowBeat !== 0 ? a : moved
       })
+
+      if (shellPath) {
+        const a = await read($, anim)
+        const shell: ShellState = {
+          mode: a.mode,
+          color: lineColor(a.mode, body?.look.lineColors),
+          line: statusLine(a.mode, a.since, t - a.since, a.target, body?.look.lines[a.mode]),
+          cwd: shellCwd,
+          hp: hud?.hp,
+          mp: hud?.mp,
+          st: hud?.st,
+          turnStartedAt,
+        }
+        if (shellDue(shell, shellLast.key, shellLast.at, t)) {
+          shellLast = { key: shellKey(shell), at: t }
+          // A record that cannot be written stops the writes; the pet carries on.
+          await $.fs.write(shellPath, shellRecord(shell, t)).catch(() => {
+            shellPath = undefined
+          })
+        }
+      }
     })
 
     return next(e)
@@ -328,6 +363,14 @@ export const register: Register = (on, options) => {
   // Only the flag changes here: the pet reads only that a notification came, never its text.
   on('classic.Notification', async ($, e, next) => {
     alert = alert || needsUser(e.notification_type)
+    return next(e)
+  })
+
+  on('session.end', async ($, e, next) => {
+    if (shellPath) {
+      const t = await $.clock.now()
+      await $.fs.write(shellPath, shellRecord({ mode: 'ended', color: '', line: '', cwd: shellCwd }, t)).catch(() => undefined)
+    }
     return next(e)
   })
 

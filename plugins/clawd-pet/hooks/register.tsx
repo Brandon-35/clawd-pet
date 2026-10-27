@@ -22,6 +22,7 @@ import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
 import type { ShellState } from './shell'
 import { callCount, countCall, countCompaction, countReread, countTurn, newStats, statsReport, streakWarning, turnRecap } from './stats'
 import { compactLine } from './compact'
+import { contextLines } from './context'
 import { addToday, dayOf, readToday, todayLine } from './today'
 import { BODY_W, FACES, HEIGHT, MAX_MINIS, compose, crop, encodeCells, encodeSvg, trailWidth } from './pixels'
 import type { Body } from './pixels'
@@ -489,7 +490,19 @@ export const register: Register = (on, options) => {
 
     const today = readToday(await $.store.get(TODAY_KEY).catch(() => undefined), dayOf(t))
 
-    return { text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today)].filter(s => s !== '').join('\n') }
+    // 'summary' estimates locally; 'full' would send token-count requests.
+    let breakdown
+    try {
+      breakdown = (await $.session.usage({ breakdown: 'summary' })).context.breakdown
+    } catch {
+      breakdown = undefined
+    }
+
+    return {
+      text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today), ...contextLines(breakdown)]
+        .filter(s => s !== '')
+        .join('\n'),
+    }
   })
 
   on('tool.call', { tool: PREVIEW_THEME }, async ($, e) => {

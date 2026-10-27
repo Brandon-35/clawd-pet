@@ -5,6 +5,8 @@ import type { Anim, Mode } from '../types'
 import { TICK_MS, ended, fail, leapClipMs, step } from './anim'
 import { HUD_WINDOW_W, barWidth, frameColor, gaugeWarnings, hudFrom, hudRows, mood, windowEdges } from './hud'
 import type { Hud } from './hud'
+import { callKey, loopWarning, repeat } from './loops'
+import type { Repeats } from './loops'
 import { minisOnScreen, reconcile } from './minis'
 import type { Mini } from './minis'
 import { animate, readTheme, restingFrame } from './theme'
@@ -110,6 +112,7 @@ export const register: Register = (on, options) => {
   let minis: Mini[] = []
   let stats = newStats(0)
   let turnStats = stats // the counts when the main loop's turn began
+  let repeats: Repeats = {}
   let previewed: unknown // the last theme preview_theme drew, for set_theme to apply without resending it
   let layout: SceneLayout | undefined // the scene of `layoutOf` on a band `bandWidth()` wide
   let layoutOf: Body | undefined
@@ -216,7 +219,8 @@ export const register: Register = (on, options) => {
     const mode = toolMode(e.tool)
     activeMode = mode
     const input = e as unknown as Record<string, unknown>
-    activeTarget = settings.targets ? targetOf(e.tool, input) : ''
+    const target = settings.targets ? targetOf(e.tool, input) : ''
+    activeTarget = target
     lastToolAt = t
 
     let result: Awaited<ReturnType<typeof next>>
@@ -231,6 +235,13 @@ export const register: Register = (on, options) => {
     // A denied call counts for the pet's face, not as a failure: the user or a hook chose it.
     const errored = 'isError' in result && result.isError === true
     stats = countCall(stats, mode, typeof input.file_path === 'string' ? input.file_path : '', errored)
+    const again = repeat(repeats, mode, errored ? undefined : callKey(e.tool, input))
+    repeats = again.repeats
+    // A failing call already warns through the streak; this catches a loop of calls that succeed.
+    const loop = settings.toasts ? loopWarning(again.n, e.tool, target) : undefined
+    if (loop) {
+      $.ui.toast(loop, { timeoutMs: 8000 })
+    }
     const streak = settings.toasts ? streakWarning(stats) : undefined
     if (streak) {
       $.ui.toast(streak, { timeoutMs: 8000 })
@@ -248,6 +259,7 @@ export const register: Register = (on, options) => {
       alert = false
       turnStartedAt = await $.clock.now()
       turnStats = stats
+      repeats = {}
     }
     return next(e)
   })

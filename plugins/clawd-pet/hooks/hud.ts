@@ -245,7 +245,7 @@ export function hudLine(h: Hud, look: HudLook = {}, forecast: Forecast = {}, wai
       parts.push(out)
     }
   }
-  if (h.costUsd !== undefined) {
+  if (h.costUsd !== undefined && h.costUsd >= 0.01) {
     parts.push({ text: `${parts.length > 0 ? ' · ' : ''}${fmtUsd(h.costUsd)}`, color: DETAIL_COLOR })
   }
   if (waiting > 0) {
@@ -259,7 +259,7 @@ const waitingText = (waiting: number) => `✻ ${waiting} waiting`
 
 /** The right of the HUD window's top edge: the other sessions waiting on the user, then the session's cost; '' for neither. */
 export const hudRight = (costUsd: number | undefined, waiting = 0) =>
-  [waiting > 0 ? waitingText(waiting) : '', costUsd === undefined ? '' : fmtUsd(costUsd)].filter(s => s !== '').join(' · ')
+  [waiting > 0 ? waitingText(waiting) : '', costUsd === undefined || costUsd < 0.01 ? '' : fmtUsd(costUsd)].filter(s => s !== '').join(' · ')
 
 /**
  * The window's edges as text, `width` cells across, corners included: rounded corners, the title at the left of the

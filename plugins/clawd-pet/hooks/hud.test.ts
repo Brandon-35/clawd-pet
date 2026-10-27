@@ -154,6 +154,7 @@ test('the line style puts every bar on one row with MP reset, warnings, and cost
   expect(parts.filter(p => p.bold && p.text.endsWith(' ') && !p.text.startsWith(' ')).map(p => p.text)).toEqual(['HP ', 'MP ', 'ST '])
   expect(joined(hudLine({ hp: 8 }, { hp: { label: 'FUEL' } }))).toBe('FUEL ╸─────── 8% /compact')
   expect(hudLine({ hp: 50 }, { hp: false })).toEqual([])
+  expect(joined(hudLine({ hp: 50, costUsd: 0 }, {}))).not.toContain('$')
 })
 
 test('the top edge names the other sessions waiting on the user before the cost, and the line style ends with them', () => {
@@ -161,6 +162,7 @@ test('the top edge names the other sessions waiting on the user before the cost,
   expect(hudRight(1.24)).toBe('$1.24')
   expect(hudRight(undefined, 2)).toBe('✻ 2 waiting')
   expect(hudRight(undefined, 0)).toBe('')
+  expect(hudRight(0.004)).toBe('')
   expect(windowEdges(HUD_WINDOW_W, 'Clawd', hudRight(1.24, 1)).top).toContain(' ✻ 1 waiting · $1.24 ─╮')
   expect(hudLine({ hp: 50, costUsd: 1.24 }, {}, {}, 1).map(p => p.text).join('').endsWith(' · $1.24 · ✻ 1 waiting')).toBe(true)
   expect(hudLine({ hp: 50 }, { hp: false }, {}, 1).map(p => p.text).join('')).toBe('✻ 1 waiting')

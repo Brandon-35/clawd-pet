@@ -52,6 +52,12 @@ export function parseRecord(id: string, text: string): Peer | undefined {
 const rank = (p: Peer) => (p.mode === 'alert' ? 0 : p.mode === 'idle' || p.mode === 'sleep' ? 2 : 1)
 const base = (cwd: string, home: string) => (home !== '' && cwd === home ? '~' : cwd.replace(/\/+$/, '').split('/').pop() || cwd || '?')
 
+/** `cwd` with the home folder as `~`, cut to its last 40 characters. */
+export const shortPath = (cwd: string, home = '') => {
+  const p = home !== '' && (cwd === home || cwd.startsWith(`${home}/`)) ? `~${cwd.slice(home.length)}` : cwd
+  return p.length > 40 ? `…${p.slice(-39)}` : p
+}
+
 /** The other sessions still alive at `now`: the ones waiting on the user first, then the working, then the idle, each by folder. */
 export function livePeers(peers: Peer[], now: number, selfId: string) {
   return peers
@@ -76,7 +82,7 @@ export function peersReport(list: Peer[], now: number, home = '') {
     const doing = p.mode === 'alert' ? '✻ needs you' : rank(p) === 2 ? p.mode : p.line || p.mode
     const clock = rank(p) === 1 && p.turnStartedAt !== undefined ? fmtDuration(now - p.turnStartedAt) : ''
 
-    return `- ${[names[i], doing, clock, p.hp === undefined ? '' : `HP ${p.hp}%`].filter(s => s !== '').join(' · ')}`
+    return `- ${[names[i], doing, clock, p.hp === undefined ? '' : `HP ${p.hp}%`, shortPath(p.cwd, home)].filter(s => s !== '').join(' · ')}`
   })
 
   return [...lines, ...(list.length > MAX_LINES ? [`… and ${list.length - MAX_LINES} more`] : [])].join('\n')
@@ -143,7 +149,7 @@ export const parseSend = (args: string) => parsePeerCommand(args, 'send')
  * the start of one name, then the start of one id of 4 characters or more, with its name. Otherwise an error that says why.
  */
 export function findPeer(list: Peer[], query: string, home = ''): { peer?: Peer; name?: string; error?: string } {
-  const q = query.toLowerCase()
+  const q = query.replace(/^#/, '').toLowerCase()
   const names = namePeers(list, home)
   const all = list.map((p, i) => ({ p, name: names[i] ?? p.id }))
   const tries = [
@@ -167,3 +173,25 @@ export function findPeer(list: Peer[], query: string, home = ''): { peer?: Peer;
 /** What `/clawd send` prints after a send to the peer named `name`. */
 export const sendReport = (name: string, result: { isDelivered: boolean; reason?: string }) =>
   result.isDelivered ? `sent to ${name}` : `not sent to ${name}: ${result.reason ?? 'unknown reason'}`
+
+/**
+ * The typeahead rows for the peer word of `/clawd send` and `/clawd note`: `#` lists every live peer, other text the
+ * ones whose name or folder holds it. A row writes the peer's name, or `#` and its id where the name has a space.
+ */
+export function peerSuggestions(before: string, token: string, list: Peer[], now: number, home = '') {
+  if (!/^\s*\/clawd\s+(send|note)\s+$/.test(before)) {
+    return []
+  }
+  const q = token.replace(/^#/, '').toLowerCase()
+  const names = namePeers(list, home)
+
+  return list
+    .map((p, i) => ({ p, name: names[i] ?? p.id }))
+    .filter(x => q === '' || x.name.toLowerCase().includes(q) || x.p.cwd.toLowerCase().includes(q) || x.p.id.toLowerCase().startsWith(q))
+    .slice(0, MAX_LINES)
+    .map(({ p, name }) => ({
+      text: `${/\s/.test(name) ? `#${p.id.slice(0, 8)}` : name} `,
+      label: name,
+      description: [shortPath(p.cwd, home), p.mode === 'alert' ? 'needs you' : p.mode, p.turnStartedAt === undefined ? '' : fmtDuration(now - p.turnStartedAt)].filter(s => s !== '').join(' · '),
+    }))
+}

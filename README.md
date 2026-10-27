@@ -97,9 +97,9 @@ The last lines say what fills the context window, so you know what to trim: they
 Run `/clawd peers` for your other live Claude Code sessions on this machine, the ones waiting on you first:
 
 ```text
-- clawd-pet · ✻ needs you · HP 41%
-- api · running npm test · 3m 05s · HP 72%
-- docs · idle · HP 90%
+- clawd-pet · ✻ needs you · HP 41% · ~/code/clawd-pet
+- api · running npm test · 3m 05s · HP 72% · ~/code/api
+- docs · idle · HP 90% · ~/code/docs
 ```
 
 It reads the files each session writes for the zsh prompt, so it sees only sessions with **Shell status** on. Plain `/clawd` adds one line, `- peers: 3 live, 1 needs you`, when any is live. Every 10 seconds the mod also checks them: a toast says when one finishes a turn of 30 seconds or more (`✻ api finished (3m 05s)`) or starts waiting on you (`✻ api needs you`), and the HUD's top edge counts the ones waiting (`✻ 1 waiting · $1.24`). The **Peer board** setting turns all of it off.
@@ -111,7 +111,7 @@ Run `/clawd send <session> <message>` to message one of them without spending a 
 sent to api
 ```
 
-Name the session as `/clawd peers` does, the start of that name, or the first 4 characters of its id when two share a folder. It needs **Peer board** on. The other session's model reads the message, so it costs that session a turn, not this one.
+Type `#` after `/clawd send ` or `/clawd note ` to pick the session from a list that shows each one's folder and state; type part of a name or path to narrow it. You can also name the session as `/clawd peers` does, the start of that name, or `#` and the first 4 characters of its id when two share a folder. It needs **Peer board** on. The other session's model reads the message, so it costs that session a turn, not this one.
 
 Run `/clawd note <session> <note>` to leave a note for the person at that session instead. Their clawd-pet takes it before the model sees it: it shows as a toast (`✎ note from web: lunch at 12`) and in their `/clawd`, and costs no tokens on either side. It goes only to a session whose clawd-pet reads notes; an older one gets a refusal here, so the note never reaches its model.
 

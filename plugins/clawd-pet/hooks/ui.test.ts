@@ -289,7 +289,7 @@ test('/clawd peers lists the other live sessions from their records, and /clawd 
   await $.session.start({ cwd: '/w/me', surface: 'terminal', isInteractive: true })
 
   const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
-  expect((await run('peers')).text).toBe('- web · ✻ needs you · HP 41%\n- api · running npm test · 1m 05s · HP 72%')
+  expect((await run('peers')).text).toBe('- web · ✻ needs you · HP 41% · /w/web\n- api · running npm test · 1m 05s · HP 72% · /w/api')
   expect((await run('')).text).toContain('- peers: 2 live, 1 needs you')
 })
 

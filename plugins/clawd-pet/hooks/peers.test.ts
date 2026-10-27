@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { findPeer, livePeers, namePeers, parsePeerCommand, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
+import { findPeer, peerSuggestions, shortPath, livePeers, namePeers, parsePeerCommand, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
 import type { Peer } from './peers'
 import { shellRecord } from './shell'
 
@@ -54,7 +54,7 @@ test('the peers report: needs you, a running clock, idle, and nothing when alone
     peer('c3', 'bash', '/w/api', { line: 'running npm test', turnStartedAt: 0, hp: 72 }),
     peer('d4', 'idle', '/w/docs', { hp: 90 }),
   ]
-  expect(peersReport(list, 185000)).toBe('- clawd-pet · ✻ needs you · HP 41%\n- api · running npm test · 3m 05s · HP 72%\n- docs · idle · HP 90%')
+  expect(peersReport(list, 185000)).toBe('- clawd-pet · ✻ needs you · HP 41% · /w/clawd-pet\n- api · running npm test · 3m 05s · HP 72% · /w/api\n- docs · idle · HP 90% · /w/docs')
   expect(peersReport([], 0)).toBe('no other live sessions')
   expect(peersLine(list)).toBe('- peers: 3 live, 1 needs you')
   expect(peersLine([])).toBe('')
@@ -122,4 +122,25 @@ test('findPeer matches an exact name, then a unique prefix, then an id prefix of
 test('sendReport says whether the message went', () => {
   expect(sendReport('api', { isDelivered: true })).toBe('sent to api')
   expect(sendReport('api', { isDelivered: false, reason: 'the session is gone' })).toBe('not sent to api: the session is gone')
+})
+
+test('shortPath puts ~ for the home folder and keeps the last 40 characters', () => {
+  expect(shortPath('/home/u/w/app', '/home/u')).toBe('~/w/app')
+  expect(shortPath('/home/uu/app', '/home/u')).toBe('/home/uu/app')
+  expect(shortPath(`/${'a'.repeat(50)}`)).toBe(`…${'a'.repeat(39)}`)
+})
+
+test('findPeer takes #id as the id', () => {
+  expect(findPeer([peer('c3d4e5', 'idle', '/'), peer('a1b2c3', 'idle', '/')], '#c3d4').peer?.id).toBe('c3d4e5')
+})
+
+test('peerSuggestions offers the peers for the peer word of send and note, with folder and state', () => {
+  const list = [peer('a1b2c3d4e5', 'alert', '/home/u/w/api', { turnStartedAt: 0 }), peer('ffee99', 'idle', '/home/u/w/web'), peer('9988aa', 'idle', '/'), peer('7766bb', 'idle', '/')]
+  const all = peerSuggestions('/clawd send ', '#', list, 65000, '/home/u')
+  expect(all.map(r => r.text)).toEqual(['api ', 'web ', '#9988aa ', '#7766bb '])
+  expect(all[0]).toEqual({ text: 'api ', label: 'api', description: '~/w/api · needs you · 1m 05s' })
+  expect(peerSuggestions('/clawd note ', 'we', list, 0, '/home/u').map(r => r.label)).toEqual(['web'])
+  expect(peerSuggestions('/clawd note ', 'w/a', list, 0, '/home/u').map(r => r.label)).toEqual(['api'])
+  expect(peerSuggestions('/clawd peers ', '#', list, 0)).toEqual([])
+  expect(peerSuggestions('/clawd send api ', '#', list, 0)).toEqual([])
 })

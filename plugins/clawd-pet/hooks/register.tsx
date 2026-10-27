@@ -20,7 +20,7 @@ import { forgetAll, forgetPath, noteRead, noteTokens, readKey, rereadWarning } f
 import type { Reads } from './reread'
 import { NOTE_MAX, NOTE_PREFIX, isNote, keepNotes, messageToast, noteText, noteToast, notesLine, unwrap } from './inbox'
 import type { Note } from './inbox'
-import { PEER_STALE_MS, findPeer, livePeers, parsePeerCommand, parseRecord, parseSend, peerEvents, peersLine, peersReport, sendReport, waitingPeers } from './peers'
+import { PEER_STALE_MS, findPeer, livePeers, parsePeerCommand, parseRecord, parseSend, peerEvents, peerSuggestions, peersLine, peersReport, sendReport, waitingPeers } from './peers'
 import type { Peer } from './peers'
 import { readSettings } from './settings'
 import { SHELL_DIR, shellDue, shellKey, shellRecord } from './shell'
@@ -578,6 +578,18 @@ export const register: Register = (on, options) => {
       $.ui.toast(messageToast(from, body), { timeoutMs: 8000 })
     }
     return next(e)
+  })
+
+  on('prompt.autocomplete', async ($, e, next) => {
+    const rows = await next(e)
+    const before = e.text.slice(0, e.start)
+    if (!settings.peers || !home || !/^\s*\/clawd\s+(send|note)\s+$/.test(before)) {
+      return rows
+    }
+    const t = await $.clock.now()
+    const live = lastPeers ?? (await readPeers($, `${home}/${SHELL_DIR}`, t, selfId))
+
+    return { suggestions: [...rows.suggestions, ...peerSuggestions(before, e.token, live, t, home)] }
   })
 
   on('command.run', { command: 'clawd' }, async ($, e) => {

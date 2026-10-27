@@ -8,8 +8,8 @@ const BLOCK = { name: 'block', sprite: ['ddddddd', 'ddddddd', 'ddddddd', 'dddddd
 const CAT = { name: 'Mochi', sprite: ['k.....k', 'kkkkkkk', 'kwkkkwk', 'kkkkkkk'], palette: { k: '#e8a33d', w: '#fff4e0' }, eyes: [[0, 1], [4, 1]] }
 const usage: SessionUsage = { startedAt: 0, context: { window: 200000, percent: 14 }, rateLimits: [{ kind: 'five_hour', percentUsed: 38 }] }
 
-/** Answers what the mod asks of Claude Code, and draws Claude Code's own hint line as one Text. Returns the mod's store, kept in memory. */
-function stubEngine(on: On) {
+/** Answers what the mod asks of Claude Code, keeping its toasts in `toasts`, and draws Claude Code's own hint line as one Text. Returns the mod's store, kept in memory. */
+function stubEngine(on: On, toasts: string[] = []) {
   const store = new Map<string, unknown>()
   mock.clock(on)
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
@@ -27,7 +27,10 @@ function stubEngine(on: On) {
   on('fs.read', () => ({ value: JSON.stringify(BLOCK) }))
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine hint'] }))
   on('ui.status', () => ({ value: undefined }))
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.toast', (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
   on('fs.write', (_$, e) => {
     store.set(`file:${e.path}`, e.text)
     return { value: undefined }
@@ -145,4 +148,23 @@ test('preview_theme writes the preview and leaves the pet on screen alone', asyn
 
   const nowhere = await $.tool.call({ tool: 'mcp__clawd-pet__preview_theme', theme: CAT })
   expect(nowhere.deny ?? nowhere.text).toContain('`path` is the HTML file to write')
+})
+
+test('a heavy tool result toasts once and lands in the report, and the row goes on unchanged', async ($, on) => {
+  const toasts: string[] = []
+  stubEngine(on, toasts)
+  on('tool.call', () => ({ result: 'ok' }))
+  const session = mock.session(on)
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+
+  await $.tool.call({ tool: 'Read', file_path: '/repo/logs/big.log' })
+  const content = [{ type: 'tool_result', tool_use_id: 't1', content: 'x'.repeat(56000) }]
+  const row = { type: 'user', role: 'user', content } as const
+  await $.session.append({ message: row, door: 'tool-result', origin: { kind: 'tool', tool: 'Read' }, uuid: 'u1' })
+  await $.session.append({ message: { ...row, content: [{ type: 'tool_result', tool_use_id: 't2', content: 'small' }] }, door: 'tool-result', origin: { kind: 'tool', tool: 'Read' }, uuid: 'u2' })
+
+  expect(toasts).toEqual(['Read big.log added ~14k tokens to the context; Read with offset/limit or Grep to take less'])
+  expect(session.appended()[0]?.message.content).toEqual(content)
+  const report = await $.command.run({ command: 'clawd', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } })
+  expect(report.text).toContain('- heaviest results: Read big.log ~14k')
 })

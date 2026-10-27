@@ -5,6 +5,8 @@ import type { Anim, Mode } from '../types'
 import { TICK_MS, ended, fail, leapClipMs, needsUser, step } from './anim'
 import { HUD_WINDOW_W, barWidth, fmtUsd, frameColor, gaugeWarnings, hudFrom, hudLine, hudRows, mood, paceWarning, windowEdges } from './hud'
 import type { Hud } from './hud'
+import { HEAVY_TOKENS, estimateTokens, heaviestLine, heavyWarning, keepHeaviest } from './heavy'
+import type { Heavy } from './heavy'
 import { callKey, loopWarning, repeat } from './loops'
 import type { Repeats } from './loops'
 import { minisOnScreen, reconcile } from './minis'
@@ -160,6 +162,8 @@ export const register: Register = (on, options) => {
   let turnStats = stats // the counts when the main loop's turn began
   let repeats: Repeats = {}
   let hps: number[] = [] // the context left at the end of recent turns
+  let heaviest: Heavy[] = [] // the session's heaviest tool results, for the report
+  const lastTargets = new Map<string, string>() // the target of each tool's latest call, to name its result
   let shellPath: string | undefined // this session's record for the zsh plugin, once its home and id are known
   let shellCwd = ''
   let shellLast = { key: '', at: 0 }
@@ -186,6 +190,7 @@ export const register: Register = (on, options) => {
     await update($, anim, () => ({ mode: 'idle', since: now, x: 0, dir: 1, tick: 0, target: '', working: false }))
     gauges = { ...gauges, hud: await usageOr($, now, undefined) }
     stats = newStats(now)
+    heaviest = []
     await countToday($, now, { sessions: 1 })
     if (settings.shellStatus) {
       try {
@@ -297,6 +302,9 @@ export const register: Register = (on, options) => {
     const input = e as unknown as Record<string, unknown>
     const target = settings.targets ? targetOf(e.tool, input) : ''
     activeTarget = target
+    if (e.agentId === undefined) {
+      lastTargets.set(e.tool, target)
+    }
     lastToolAt = t
 
     let result: Awaited<ReturnType<typeof next>>
@@ -327,6 +335,22 @@ export const register: Register = (on, options) => {
     }
 
     return result
+  })
+
+  // Observe-only: the row goes on unchanged. A subagent's results stay out of the main context.
+  on('session.append', { door: 'tool-result' }, async ($, e, next) => {
+    const tool = e.origin.kind === 'tool' ? e.origin.tool : undefined
+    if (e.agentId === undefined && tool !== undefined && !tool.startsWith(OWN_TOOLS)) {
+      const tokens = estimateTokens(e.message.content)
+      if (tokens >= HEAVY_TOKENS) {
+        const target = lastTargets.get(tool) ?? ''
+        heaviest = keepHeaviest(heaviest, { tool, target, tokens })
+        if (settings.toasts) {
+          $.ui.toast(heavyWarning(tool, target, tokens), { timeoutMs: 10000 })
+        }
+      }
+    }
+    return next(e)
   })
 
   // The engine pushes each new measurement; the tick's polling stays as the fallback.
@@ -415,7 +439,7 @@ export const register: Register = (on, options) => {
 
     const today = readToday(await $.store.get(TODAY_KEY).catch(() => undefined), dayOf(t))
 
-    return { text: `${statsReport(stats, t, hud, forecast)}\n${todayLine(today)}` }
+    return { text: [statsReport(stats, t, hud, forecast), heaviestLine(heaviest), todayLine(today)].filter(s => s !== '').join('\n') }
   })
 
   on('tool.call', { tool: PREVIEW_THEME }, async ($, e) => {

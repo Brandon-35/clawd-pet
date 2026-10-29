@@ -341,15 +341,18 @@ export const register: Register = (on, options) => {
       const room = Math.max(0, bodyColumns - BODY_W - trail - STATUS_ROOM)
       const scene = body && sceneLayout(body)
       const obstacles = scene ? obstacleSpans(scene) : []
+      let latest: Anim | undefined
       await update($, anim, a => {
         const moved = step(a, { isWorking, activeTools, activeMode, activeTarget, lastToolAt, room, obstacles, trail, alert, compacting }, t, settings)
         // Minis hop on every tick, so they keep the redraw rate up while the pet idles.
         const slowBeat = minis.length > 0 ? undefined : SLOW_BEATS[moved.mode]
-        return slowBeat !== undefined && moved.mode === a.mode && beat % slowBeat !== 0 ? a : moved
+        latest = slowBeat !== undefined && moved.mode === a.mode && beat % slowBeat !== 0 ? a : moved
+
+        return latest
       })
 
       if (shellPath) {
-        const a = await read($, anim)
+        const a = latest ?? (await read($, anim))
         const shell: ShellState = {
           mode: a.mode,
           color: lineColor(a.mode, body?.look.lineColors),

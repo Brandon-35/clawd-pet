@@ -2,14 +2,14 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Anim, Mode } from '../types'
-import { TICK_MS, ended, fail, leapClipMs, needsUser, step } from './anim'
+import { TICK_MS, ended, fail, leapClipMs, needsUser, pauseAfter, step } from './anim'
 import { HUD_WINDOW_W, barWidth, frameColor, gaugeWarnings, hudFrom, hudLine, hudRight, hudRows, mood, paceWarning, windowEdges } from './hud'
 import type { Hud } from './hud'
 import { HEAVY_TOKENS, estimateTokens, heaviestLine, heavyWarning, keepHeaviest } from './heavy'
 import type { Heavy } from './heavy'
 import { callKey, loopWarning, repeat } from './loops'
 import type { Repeats } from './loops'
-import { minisOnScreen, reconcile } from './minis'
+import { agentsDue, minisOnScreen, reconcile } from './minis'
 import { noteTurn, stepLimit, turnsLeft } from './pace'
 import type { LimitPace } from './pace'
 import type { Mini } from './minis'
@@ -45,6 +45,7 @@ const GROUND_ROWS = GROUND_H / 2
 const STATUS_ROOM = 20 // columns kept free beside a running pet for its status line
 const USAGE_EVERY_BEATS = 20
 const AGENTS_EVERY_BEATS = 5
+const IDLE_AGENTS_EVERY_BEATS = 20 // no turn running and no mini on screen: an agent can only start with a turn
 const PEERS_EVERY_BEATS = 100 // every 10 s: the other sessions' records, for their toasts and the HUD's waiting count
 // How long a rate limit's pace must run before it makes a forecast, so one burst does not.
 const PACE_MIN_MS = { mp: 15 * 60000, st: 2 * 3600000 }
@@ -200,6 +201,7 @@ export const register: Register = (on, options) => {
   let activeTarget = ''
   let bodyColumns = 80
   let beat = 0
+  let pauseUntil = 0 // performance.now() before which the tick skips, after a slow one
   let showsError = false
   let alert = false // a notification waits on the user
   let compacting = false
@@ -320,6 +322,10 @@ export const register: Register = (on, options) => {
     }
 
     $.clock.every(TICK_MS, async () => {
+      const began = performance.now()
+      if (began < pauseUntil) {
+        return
+      }
       const t = await $.clock.now()
       beat += 1
       if (beat % USAGE_EVERY_BEATS === 0) {
@@ -327,7 +333,7 @@ export const register: Register = (on, options) => {
         const fresh = await usageOr($, t, undefined)
         gauges = takeReading($, gauges, fresh, t, settings.toasts, turnsLeft(hps))
       }
-      if (settings.minis && beat % AGENTS_EVERY_BEATS === 0) {
+      if (settings.minis && agentsDue(beat, isWorking || minis.length > 0, AGENTS_EVERY_BEATS, IDLE_AGENTS_EVERY_BEATS)) {
         minis = await minisOr($, t, minis)
       }
 
@@ -380,6 +386,8 @@ export const register: Register = (on, options) => {
           readingPeers = false
         }
       }
+      // A slow tick means the host is busy; every call here adds to it, so the next ticks wait.
+      pauseUntil = performance.now() + pauseAfter(performance.now() - began)
     })
 
     return next(e)

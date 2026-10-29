@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { AgentInfo } from 'claude-code'
 
-import { minisOnScreen, reconcile } from './minis'
+import { agentsDue, minisOnScreen, reconcile } from './minis'
 
 const agent = (id: string, status: AgentInfo['status']): AgentInfo => ({ id, description: id, type: 'general-purpose', status })
 
@@ -32,4 +32,10 @@ test('the minis on screen carry their ages, and an ended one shows until it leav
   const minis = [{ id: 'a', since: 0 }, { id: 'b', since: 200, doneAt: 1000, failed: true }]
   expect(minisOnScreen(minis, 2000)).toEqual([{ age: 2000, doneFor: undefined, failed: undefined }, { age: 1800, doneFor: 1000, failed: true }])
   expect(minisOnScreen(minis, 2500)).toHaveLength(1)
+})
+
+test('agents are listed often while busy and rarely while idle', () => {
+  expect([0, 5, 10].map(b => agentsDue(b, true, 5, 20))).toEqual([true, true, true])
+  expect(agentsDue(7, true, 5, 20)).toBe(false)
+  expect([0, 5, 10, 20].map(b => agentsDue(b, false, 5, 20))).toEqual([true, false, false, true])
 })

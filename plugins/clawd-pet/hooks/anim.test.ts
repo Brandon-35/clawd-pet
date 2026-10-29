@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Anim } from '../types'
-import { LEAP_MS, ended, fail, needsUser, step } from './anim'
+import { LEAP_MS, ended, fail, needsUser, pauseAfter, step } from './anim'
 import type { Activity } from './anim'
 
 const resting: Anim = { mode: 'idle', since: 0, x: 0, dir: 1, tick: 0, target: '', working: false }
@@ -140,4 +140,11 @@ test('a plugin notification does not call for the user, every other kind does', 
   expect(needsUser('permission_prompt')).toBe(true)
   expect(needsUser('idle_prompt')).toBe(true)
   expect(needsUser(undefined)).toBe(true)
+})
+
+test('the tick holds off for as long as a slow tick took, up to 2 s, and never after a fast one', () => {
+  expect(pauseAfter(40)).toBe(0)
+  expect(pauseAfter(300)).toBe(0)
+  expect(pauseAfter(301)).toBe(301)
+  expect(pauseAfter(6000)).toBe(2000)
 })

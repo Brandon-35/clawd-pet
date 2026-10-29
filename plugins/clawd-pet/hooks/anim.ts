@@ -6,6 +6,11 @@ import type { Settings } from './settings'
 import type { ToolMode } from './status'
 
 export const TICK_MS = 100
+const SLOW_TICK_MS = 3 * TICK_MS // a tick this slow means the host is busy
+const MAX_PAUSE_MS = 2000
+
+/** How long the tick holds off after one that took `tookMs`: as long as that tick took, so the mod leaves a busy host half its time. */
+export const pauseAfter = (tookMs: number) => (tookMs > SLOW_TICK_MS ? Math.min(tookMs, MAX_PAUSE_MS) : 0)
 const SPEED = 9 // cells per second at normal pace
 const RUN_AFTER_TOOL_MS = 4000
 const JUMP_YIELDS_MS = 400 // a tool call cuts the start-of-turn hop short after this long

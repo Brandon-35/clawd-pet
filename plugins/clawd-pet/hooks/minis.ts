@@ -36,3 +36,6 @@ export function minisOnScreen(minis: Mini[], t: number): MiniView[] {
     .filter(m => m.doneAt === undefined || t - m.doneAt < LEAVE_MS)
     .map(m => ({ age: t - m.since, doneFor: m.doneAt === undefined ? undefined : t - m.doneAt, failed: m.failed }))
 }
+
+/** Whether the tick should list the session's agents now: every `busyEvery` beats while a turn runs or a mini is on screen, else every `idleEvery`. */
+export const agentsDue = (beat: number, busy: boolean, busyEvery: number, idleEvery: number) => beat % (busy ? busyEvery : idleEvery) === 0
